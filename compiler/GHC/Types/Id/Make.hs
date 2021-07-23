@@ -43,6 +43,7 @@ import GHC.Builtin.Types
 import GHC.Builtin.Names
 
 import GHC.Core
+import GHC.Core.Opt.Arity( typeOneShot )
 import GHC.Core.Type
 import GHC.Core.Multiplicity
 import GHC.Core.TyCo.Rep
@@ -1781,10 +1782,12 @@ inlined.
 -}
 
 realWorldPrimId :: Id   -- :: State# RealWorld
-realWorldPrimId = pcMiscPrelId realWorldName realWorldStatePrimTy
+realWorldPrimId = pcMiscPrelId realWorldName id_ty
                      (noCafIdInfo `setUnfoldingInfo` evaldUnfolding    -- Note [evaldUnfoldings]
-                                  `setOneShotInfo`   stateHackOneShot
-                                  `setNeverRepPoly`  realWorldStatePrimTy)
+                                  `setOneShotInfo`   typeOneShot id_ty
+                                  `setNeverRepPoly`  id_ty)
+   where
+     id_ty = realWorldStatePrimTy
 
 voidPrimId :: Id     -- Global constant :: Void#
                      -- The type Void# is now the same as (# #) (ticket #18441),
