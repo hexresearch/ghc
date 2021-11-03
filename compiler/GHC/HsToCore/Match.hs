@@ -753,10 +753,10 @@ matchWrapper ctxt mb_scr (MG { mg_alts = L _ matches
         ; new_vars    <- case matches of
                            []    -> newSysLocalsDs' arg_tys
                            (m:_) ->
-                            selectMatchVars (zipWithEqual "matchWrapper"
+                            selectMatchPatVars (zipWithEqual "matchWrapper"
                                               (\a b -> (scaledMult a, unLoc b))
                                                 (map tyCoBinderScaledType arg_tys)
-                                                (discardLInvisPats (hsLMatchPats m)))
+                                                (hsLMatchPats m))
 
         -- Pattern match check warnings for /this match-group/.
         -- @rhss_nablas@ is a flat list of covered Nablas for each RHS.
