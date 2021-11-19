@@ -119,6 +119,7 @@ data PsMessage
 
    -- | Unrecognised pragma
    | PsWarnUnrecognisedPragma
+   | PsWarnMisplacedPragma
 
    -- | Invalid Haddock comment position
    | PsWarnHaddockInvalidPos

@@ -383,6 +383,11 @@ data GhcHint
   -}
   | ImportSuggestion ImportSuggestion
 
+  {- Found a pragma in the body of a module, suggest
+     placing it in the header
+  -}
+  | SuggestPlacePragmaInHeader
+
 
 -- | An 'InstantiationSuggestion' for a '.hsig' file. This is generated
 -- by GHC in case of a 'DriverUnexpectedSignature' and suggests a way

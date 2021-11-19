@@ -499,6 +499,7 @@ data WarningFlag =
    | Opt_WarnIdentities
    | Opt_WarnTabs
    | Opt_WarnUnrecognisedPragmas
+   | Opt_WarnMisplacedPragmas
    | Opt_WarnDodgyForeignImports
    | Opt_WarnUnusedDoBind
    | Opt_WarnWrongDoBind
@@ -617,6 +618,7 @@ warnFlagNames wflag = case wflag of
   Opt_WarnTypedHoles                              -> "typed-holes" :| []
   Opt_WarnPartialTypeSignatures                   -> "partial-type-signatures" :| []
   Opt_WarnUnrecognisedPragmas                     -> "unrecognised-pragmas" :| []
+  Opt_WarnMisplacedPragmas                        -> "misplaced-pragmas" :| []
   Opt_WarnUnsafe                                  -> "unsafe" :| []
   Opt_WarnUnsupportedCallingConventions           -> "unsupported-calling-conventions" :| []
   Opt_WarnUnsupportedLlvmVersion                  -> "unsupported-llvm-version" :| []
@@ -723,6 +725,7 @@ standardWarnings -- see Note [Documenting warning flags]
         Opt_WarnDeferredOutOfScopeVariables,
         Opt_WarnPartialTypeSignatures,
         Opt_WarnUnrecognisedPragmas,
+        Opt_WarnMisplacedPragmas,
         Opt_WarnDuplicateExports,
         Opt_WarnDerivingDefaults,
         Opt_WarnOverflowedLiterals,
