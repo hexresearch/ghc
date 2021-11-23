@@ -820,4 +820,4 @@ test('ImplicitParamFDs', normal, compile, [''])
 test('T18406b', normal, compile, ['-ddump-tc -fprint-explicit-foralls -dsuppress-uniques -fprint-typechecker-elaboration'])
 test('T18529', normal, compile, ['-ddump-tc -fprint-explicit-foralls -dsuppress-uniques -fprint-typechecker-elaboration'])
 test('T21023', normal, compile, ['-ddump-types'])
-
+test('T17594a', normal, compile, [''])
