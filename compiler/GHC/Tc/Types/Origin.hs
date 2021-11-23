@@ -35,7 +35,7 @@ module GHC.Tc.Types.Origin (
   -- * Arrow command origin
   FRRArrowOrigin(..), pprFRRArrowOrigin,
   -- * ExpectedFunTy origin
-  ExpectedFunTyOrigin(..), pprExpectedFunTyOrigin, pprExpectedFunTyHerald,
+  ExpectedFunTyOrigin(..), extractExpr, pprExpectedFunTyOrigin, pprExpectedFunTyHerald,
 
   ) where
 
@@ -1248,6 +1248,12 @@ data ExpectedFunTyOrigin
   | ExpectedFunTyMatches  !TypedThing !(MatchGroup GhcRn (LHsExpr GhcRn))
   | ExpectedFunTyLam      !(MatchGroup GhcRn (LHsExpr GhcRn))
   | ExpectedFunTyLamCase  !(HsExpr GhcRn)
+
+extractExpr :: ExpectedFunTyOrigin -> HsExpr GhcRn
+extractExpr (ExpectedFunTySyntaxOp _ e) = e
+extractExpr (ExpectedFunTyViewPat e)    = e
+extractExpr (ExpectedFunTyLamCase e)    = e
+extractExpr _                           = panic "no expr"
 
 pprExpectedFunTyOrigin :: ExpectedFunTyOrigin
                        -> Int -- ^ argument position (starting at 1)

@@ -751,11 +751,11 @@ matchWrapper ctxt mb_scr (MG { mg_alts = L _ matches
         ; locn   <- getSrcSpanDs
 
         ; new_vars    <- case matches of
-                           []    -> newSysLocalsDs arg_tys
+                           []    -> newSysLocalsDs' arg_tys
                            (m:_) ->
                             selectMatchVars (zipWithEqual "matchWrapper"
                                               (\a b -> (scaledMult a, unLoc b))
-                                                arg_tys
+                                                (map tyCoBinderScaledType arg_tys)
                                                 (discardLInvisPats (hsLMatchPats m)))
 
         -- Pattern match check warnings for /this match-group/.

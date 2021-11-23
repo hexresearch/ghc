@@ -17,6 +17,7 @@ import GHC.Prelude
 import {-# SOURCE #-}   GHC.Tc.Gen.Expr( tcCheckMonoExpr, tcInferRho, tcSyntaxOp
                                        , tcCheckPolyExpr )
 
+import GHC.Core.Type ( toAnonTyCoBinder )
 import GHC.Hs
 import GHC.Hs.Syn.Type
 import GHC.Tc.Errors.Types
@@ -280,7 +281,7 @@ tc_cmd env
                 -- Check the patterns, and the GRHSs inside
         ; (pats', grhss') <- setSrcSpanA mtch_loc                                 $
                              tcLMatchPats (ArrowMatchCtxt KappaExpr)
-                               pats (map (unrestricted . mkCheckExpType) arg_tys) $
+                               pats (map (\ty -> ExpAnon VisArg (Scaled Many (mkCheckExpType ty))) arg_tys) $
                              tc_grhss grhss cmd_stk' (mkCheckExpType res_ty)
 
         ; let match' = L mtch_loc (Match { m_ext = noAnn
@@ -297,7 +298,7 @@ tc_cmd env
 
         ; let
               cmd' = HsCmdLam x (MG { mg_alts = L l [match']
-                                    , mg_ext = MatchGroupTc arg_tys res_ty
+                                    , mg_ext = MatchGroupTc (map toAnonTyCoBinder arg_tys) res_ty
                                     , mg_origin = origin })
         ; return (mkHsCmdWrap (mkWpCastN co) cmd') }
   where
