@@ -441,7 +441,7 @@ dmdAnal' env dmd (Case scrut case_bndr ty [Alt alt bndrs rhs])
         -- What matters is its nested sub-demand!
         -- NB: If case_bndr_dmd is absDmd, boxity will say Unboxed, which is
         -- what we want, because then `seq` will put a `seqDmd` on its scrut.
-        (_ :* case_bndr_sd) = case_bndr_dmd
+        (_ :* case_bndr_sd) = seqDmd `plusDmd` case_bndr_dmd
         -- Compute demand on the scrutinee
         -- FORCE the result, otherwise thunks will end up retaining the
         -- whole DmdEnv

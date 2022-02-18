@@ -665,7 +665,7 @@ data Demand
 -- | Only meant to be used in the pattern synonym below!
 viewDmdPair :: Demand -> (Card, SubDemand)
 viewDmdPair BotDmd   = (C_10, botSubDmd)
-viewDmdPair AbsDmd   = (C_00, seqSubDmd)
+viewDmdPair AbsDmd   = (C_00, botSubDmd)
 viewDmdPair (D n sd) = (n, sd)
 
 -- | @c :* sd@ is a demand that says \"evaluated @c@ times, and each time it
@@ -685,7 +685,7 @@ viewDmdPair (D n sd) = (n, sd)
 pattern (:*) :: HasDebugCallStack => Card -> SubDemand -> Demand
 pattern n :* sd <- (viewDmdPair -> (n, sd)) where
   C_10 :* sd = BotDmd & assertPpr (sd == botSubDmd) (text "B /=" <+> ppr sd)
-  C_00 :* sd = AbsDmd & assertPpr (sd == seqSubDmd) (text "A /=" <+> ppr sd)
+  C_00 :* sd = AbsDmd & assertPpr (sd == botSubDmd) (text "A /=" <+> ppr sd)
   n    :* sd = D n sd & assertPpr (isCardNonAbs n)  (ppr n $$ ppr sd)
 {-# COMPLETE (:*) #-}
 
@@ -868,6 +868,8 @@ lubSubDmd _             _            = topSubDmd
 
 -- | Denotes '∪' on 'Demand'.
 lubDmd :: Demand -> Demand -> Demand
+lubDmd BotDmd      dmd         = dmd
+lubDmd dmd         BotDmd      = dmd
 lubDmd (n1 :* sd1) (n2 :* sd2) = lubCard n1 n2 :* lubSubDmd sd1 sd2
 
 multSubDmd :: Card -> SubDemand -> SubDemand
