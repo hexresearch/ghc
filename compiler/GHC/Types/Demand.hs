@@ -837,13 +837,17 @@ unboxDeeplyDmd (D n sd) = D n (unboxDeeplySubDmd sd)
 
 -- | Denotes '∪' on 'SubDemand'.
 lubSubDmd :: SubDemand -> SubDemand -> SubDemand
--- Handle botSubDmd and topSubDmd (mostly an optimisation, but the Unboxed
+-- Handle botSubDmd (mostly an optimisation, but the Unboxed
 -- thing is a change in behavior because Unboxed should win in lub;
 -- see Note [lubBoxity and plusBoxity].)
 lubSubDmd (Poly Unboxed C_10) d2                  = d2
 lubSubDmd d1                  (Poly Unboxed C_10) = d1
-lubSubDmd d@(Poly Boxed C_0N) _                   = d
-lubSubDmd _                   d@(Poly Boxed C_0N) = d
+-- If we activate the following rewrite, we'll fail T3586, the reason why we
+-- let Unboxed win in lubBoxity in the first place.
+-- See Note [lubBoxity and plusBoxity].
+-- lubSubDmd d@(Poly Boxed C_0N) _                   = d
+-- lubSubDmd _                   d@(Poly Boxed C_0N) = d
+
 -- Handle Prod
 lubSubDmd (Prod b1 ds1) (Poly b2 n2)
   | let !d = polyFieldDmd b2 n2
@@ -1160,6 +1164,74 @@ Since the program is going to diverge, this swaps one error for another,
 but it's really a bad idea to *ever* evaluate an absent argument.
 In #7319 we get
    T7319.exe: Oops!  Entered absent arg w_s1Hd{v} [lid] [base:GHC.Base.String{tc 36u}]
+
+Note [SubDemand denotes at least one evaluation]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Motivated by #21081, we want to treat the nested SubDemand of a *lazy* Demand
+like `LP(ds)` as if the `P(ds)` is a lower bound over all distinct evaluations
+(which will not happen on all code paths, albeit). In other words, in the
+interleaved demand representation, every SubDemand denotes *at least one*
+evaluation, regardless of whether the outer demand is lazy.
+
+Why would we want that? The short version is
+  * We get to take advantage of call-by-value/let-to-case in more situations (see below)
+  * We get to do eta-reduction based on the enriched demand information (see below)
+  * If we didn't assume at least one evaluation for the SubDemand, we'd leave
+    these useful information on the table, while it is clear that *any* demand
+    nested inside a lazy (product) demand must be lazy. That is quite redundant!
+    For example, in `nP(m..)` we will always have a lazy `m` as soon as `n`
+    is lazy. It seems wasteful not to use the lower bound of `m` for something
+    less redudandant. It is also testament to the fact that we don't *lose* any
+    information by assuming at least one evaluation.
+
+More let-to-case example (from testcase T21081):
+```hs
+f :: (Bool, Bool) -> (Bool, Bool)
+f pr = (case pr of (a,b) -> a /= b, True)
+g :: Int -> (Bool, Bool)
+g x = let y = let z = odd x in (z,z) in f y
+```
+Altough `f` is lazy in `pr`, we could case-bind `z` because it is always
+evaluated when `y` is evaluated. So we give `pr` demand `LP(SL,SL)`
+(most likely with better upper bounds/usage) and demand analysis then
+infers a strict demand for `z`.
+
+More eta-reduction example (from testcase T21081):
+```hs
+myfoldl :: (a -> b -> a) -> a -> [b] -> a
+myfoldl f z [] = z
+myfoldl f !z (x:xs) = myfoldl (\a b -> f a b) (f z x) xs
+```
+Here, we can give `f` a demand of `LCS(C1(L))` (instead of the lazier
+`LCL(C1(L))`) which says "Whenever `f` is evaluated (lazily), it is also called
+with two arguments". And this enables GHC.Core.Utils.tryEtaReduce to eta-reduce
+`\a b -> f a b` to `f` in the call site of `myfoldl`. Nice!
+
+Of course, we now have to maintain the invariant that the SubDemand is assumed
+to be eval'd at least once. And for strict demands, we know that it is indeed
+always the case. That makes for a strange definition of `plusDmd`, where
+depending on the strictness of both arguments we either
+
+  1. `plusSubDmd` on the nested SubDemands if both args are strict (simple).
+  2. `plusSubDmd` on the nested SubDemands if one of them is lazy, which we
+     *lazify* before (that's new), so that e.g.
+       `LP(1L) + SP(ML) = (L+S)P((M*1L)+ML) = SP(ML+ML) = SP(L)`
+     Multiplying with `M`/`C_01` is the "lazify" part here.
+  3. `lubPlusSubDmd` on the nested SubDemands if both args are lazy (that's new).
+     This new operation combines `lubSubDmd` on lower bounds with `plusSubDmd`
+     on upper bounds. This additional complexity comes from the fact that
+     upper bounds are *never* relative to one evaluation
+     (well, except in call demands... See Note [Call demands are relative]).
+
+Could we also treat upper bounds similarly, e.g., assuming *exactly one*
+evaluation in the SubDemand? At least that has potential to simplify the
+definition of `plusDmd`.
+But the answer is "probably not", because we can't do eta-expansion of a thunk
+`f` based on a demand like `LC1(C1(L))`. Today, we can trust this demand to mean
+"f is eval'd many times, but called *exactly once*". But if the `SubDemand`
+means "for exactly one evaluation", then that same demand could also denote the
+usage `if b then 0 else f 1 2 + f 3 4` and we wouldn't want to eta-expand `f`
+here.
 
 Note [Call demands are relative]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

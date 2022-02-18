@@ -1,8 +1,8 @@
 
 ==================== Strictness signatures ====================
 T21081.blah: <LCL(C1(L))><1!P(1L)>
-T21081.blurg: <S!L>
-T21081.blurg2: <S!L>
+T21081.blurg: <S!P(SL)>
+T21081.blurg2: <S!P(SL)>
 T21081.do_blah: <LCS(C1(L))>
 T21081.f: <MP(SL,SL)>
 T21081.fst': <1!P(1L,A)>
