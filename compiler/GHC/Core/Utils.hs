@@ -96,8 +96,8 @@ import GHC.Types.Tickish
 import GHC.Types.Id
 import GHC.Types.Id.Info
 import GHC.Types.Unique
-import GHC.Types.Basic     ( Arity, CbvMark(..), Levity(..)
-                           , isMarkedCbv )
+import GHC.Types.Basic
+import GHC.Types.Demand
 import GHC.Types.Unique.Set
 
 import GHC.Data.FastString
@@ -2413,8 +2413,8 @@ need to address that here.
 
 -- When updating this function, make sure to update
 -- CorePrep.tryEtaReducePrep as well!
-tryEtaReduce :: [Var] -> CoreExpr -> Maybe CoreExpr
-tryEtaReduce bndrs body
+tryEtaReduce :: [Var] -> CoreExpr -> SubDemand -> Maybe CoreExpr
+tryEtaReduce bndrs body eval_sd
   = go (reverse bndrs) body (mkRepReflCo (exprType body))
   where
     incoming_arity = count isId bndrs
@@ -2425,13 +2425,6 @@ tryEtaReduce bndrs body
        -> Maybe CoreExpr   -- Of type a1 -> a2 -> a3 -> ts
     -- See Note [Eta reduction with casted arguments]
     -- for why we have an accumulating coercion
-    go [] fun co
-      | ok_fun fun
-      , let used_vars = exprFreeVars fun `unionVarSet` tyCoVarsOfCo co
-      , not (any (`elemVarSet` used_vars) bndrs)
-      = Just (mkCast fun co)   -- Check for any of the binders free in the result
-                               -- including the accumulated coercion
-
     go bs (Tick t e) co
       | tickishFloatable t
       = fmap (Tick t) $ go bs e co
@@ -2442,7 +2435,20 @@ tryEtaReduce bndrs body
       = fmap (flip (foldr mkTick) ticks) $ go bs fun co'
             -- Float arg ticks: \x -> e (Tick t x) ==> Tick t e
 
-    go _ _ _  = Nothing         -- Failure!
+    go remaining_bndrs fun co
+      | all isTyVar remaining_bndrs
+      , remaining_bndrs `ltLength` bndrs
+      , ok_fun fun
+      , let used_vars = exprFreeVars fun `unionVarSet` tyCoVarsOfCo co
+            reduced_bndrs = dropList remaining_bndrs bndrs
+      , not (any (`elemVarSet` used_vars) reduced_bndrs)
+          -- Check for any of the binders free in the result including the
+          -- accumulated coercion
+      = Just $ mkLams (reverse remaining_bndrs) (mkCast fun co)
+
+    go _remaining_bndrs _fun  _  = -- pprTrace "tER fail" (ppr _fun $$ ppr _remaining_bndrs) $
+                                   Nothing
+
 
     ---------------
     -- Note [Eta reduction conditions]
@@ -2453,10 +2459,11 @@ tryEtaReduce bndrs body
     ok_fun _fun                = False
 
     ---------------
-    ok_fun_id fun = -- There are arguments to reduce...
-                    fun_arity fun >= incoming_arity &&
-                    -- ... and the function can be eta reduced to arity 0
-                    canEtaReduceToArity fun 0 0
+    ok_fun_id fun = -- Check that eta-reduction won't make the program stricter...
+                    (fun_arity fun >= incoming_arity
+                       || isStrict (peelManyCalls incoming_arity eval_sd))
+                    -- ... and that the function can be eta reduced to arity 0
+                    && canEtaReduceToArity fun 0 0
     ---------------
     fun_arity fun             -- See Note [Arity care]
        | isLocalId fun

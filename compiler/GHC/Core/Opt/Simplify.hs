@@ -2173,7 +2173,7 @@ rebuildCall env fun_info
         -- have to be very careful about bogus strictness through
         -- floating a demanded let.
   = do  { arg' <- simplExprC (arg_se `setInScopeFromE` env) arg
-                             (mkLazyArgStop arg_ty (lazyArgContext fun_info))
+                             (mkLazyArgStop arg_ty fun_info)
         ; rebuildCall env (addValArgTo fun_info  arg' fun_ty) cont }
   where
     arg_ty = funArgTy fun_ty
@@ -4245,4 +4245,3 @@ for the RHS as well as the LHS, but that seems more conservative
 than necesary.  Allowing some inlining might, for example, eliminate
 a binding.
 -}
-

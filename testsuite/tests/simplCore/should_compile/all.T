@@ -379,3 +379,8 @@ test('T19790',  normal, compile, ['-O -ddump-rule-firings'])
 # -O0 is needed to trigger it because that switches rules off,
 # which (before the fix) lost crucial dependencies
 test('T20820',  normal, compile, ['-O0'])
+
+# Key here is that the argument to ifoldl' is eta-reduced in Core to
+#   `/\m. f @(S m)`
+# which will erase completely in STG
+test('T20040', [ grep_errmsg(r'ifoldl\'') ], compile, ['-O -ddump-stg-final -dno-typeable-binds -dsuppress-all -dsuppress-uniques'])
