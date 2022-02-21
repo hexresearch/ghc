@@ -531,7 +531,6 @@ pattern C_01 = Card 0b011
 pattern C_1N :: Card
 pattern C_1N = Card 0b110
 -- | Every possible cardinality; the top element, {0,1,n}. Pretty-printed as L.
--- See also 'strictifyCard'
 pattern C_0N :: Card
 pattern C_0N = Card 0b111
 
@@ -837,17 +836,12 @@ unboxDeeplyDmd (D n sd) = D n (unboxDeeplySubDmd sd)
 
 -- | Denotes '∪' on 'SubDemand'.
 lubSubDmd :: SubDemand -> SubDemand -> SubDemand
--- Handle botSubDmd (mostly an optimisation, but the Unboxed
--- thing is a change in behavior because Unboxed should win in lub;
--- see Note [lubBoxity and plusBoxity].)
+-- Handle botSubDmd (just an optimisation, the general case would do the same)
 lubSubDmd (Poly Unboxed C_10) d2                  = d2
 lubSubDmd d1                  (Poly Unboxed C_10) = d1
--- If we activate the following rewrite, we'll fail T3586, the reason why we
--- let Unboxed win in lubBoxity in the first place.
--- See Note [lubBoxity and plusBoxity].
--- lubSubDmd d@(Poly Boxed C_0N) _                   = d
--- lubSubDmd _                   d@(Poly Boxed C_0N) = d
-
+-- Handle topSubDmd (just an optimisation, the general case would do the same)
+lubSubDmd d@(Poly Boxed C_0N) _                   = d
+lubSubDmd _                   d@(Poly Boxed C_0N) = d
 -- Handle Prod
 lubSubDmd (Prod b1 ds1) (Poly b2 n2)
   | let !d = polyFieldDmd b2 n2
@@ -872,12 +866,13 @@ lubSubDmd _             _            = topSubDmd
 
 -- | Denotes '∪' on 'Demand'.
 lubDmd :: Demand -> Demand -> Demand
+-- Handle botDmd (just an optimisation, the general case would do the same)
 lubDmd BotDmd      dmd         = dmd
 lubDmd dmd         BotDmd      = dmd
 lubDmd (n1 :* sd1) (n2 :* sd2) = lubCard n1 n2 :* lubSubDmd sd1 sd2
 
 multSubDmd :: Card -> SubDemand -> SubDemand
-multSubDmd C_11 sd           = sd
+multSubDmd C_11 sd           = sd -- An optimisation, for when sd is a deep Prod
 -- The following three equations don't have an impact on Demands, only on
 -- Boxity. They are needed so that we don't trigger the assertions in `:*`
 -- when called from `multDmd`.
@@ -889,13 +884,20 @@ multSubDmd n    (Call n' sd) = mkCall (multCard n n') sd -- See Note [Call deman
 multSubDmd n    (Prod b ds)  = mkProd b (strictMap (multDmd n) ds)
 
 multDmd :: Card -> Demand -> Demand
--- The first two lines compute the same result as the last line, but won't
--- trigger the assertion in `:*` for input like `multDmd B 1L`, which would call
--- `B :* A`. We want to return `B` in these cases.
-multDmd C_10 (n :* _)    = if isStrict n then BotDmd else AbsDmd
-multDmd n    (C_10 :* _) = if isStrict n then BotDmd else AbsDmd
+multDmd C_11 dmd       = dmd -- An optimisation
+-- The following four lines make sure that we rewrite to AbsDmd and BotDmd
+-- whenever the leading cardinality is absent (C_00 or C_10).
+-- Otherwise it may happen that the SubDemand is not 'botSubDmd', triggering
+-- the assertion in `:*`.
+-- Example: `multDmd B 1L = BA`, so with an inner `seqSubDmd`. Our lattice
+-- allows us to always rewrite this to proper BotDmd and we maintain the
+-- invariant that this is indeed the case.
+multDmd C_00 _        = AbsDmd
+multDmd _    AbsDmd   = AbsDmd
+multDmd C_10 (D n _)  = if isStrict n then BotDmd else AbsDmd
+multDmd n    BotDmd   = if isStrict n then BotDmd else AbsDmd
 -- See Note [SubDemand denotes at least one evaluation] for the strictifyCard
-multDmd n    (m :* sd)   = multCard n m :* multSubDmd (strictifyCard n) sd
+multDmd n    (D m sd) = multCard n m :* multSubDmd (strictifyCard n) sd
 
 -- | Denotes '+' on 'SubDemand'.
 plusSubDmd :: SubDemand -> SubDemand -> SubDemand
@@ -924,9 +926,9 @@ plusSubDmd _            _            = topSubDmd
 
 -- | Denotes '+' on 'Demand'.
 plusDmd :: Demand -> Demand -> Demand
--- The first two equations handle the special case of absent demands:
-plusDmd AbsDmd dmd    = dmd
-plusDmd dmd    AbsDmd = dmd
+-- Handle absDmd (just an optimisation, the general case would do the same)
+plusDmd AbsDmd      dmd         = dmd
+plusDmd dmd         AbsDmd      = dmd
 -- The four special cases here are due to strictness demands and
 -- Note [SubDemand denotes at least one evaluation]:
 plusDmd (n1 :* sd1) (n2 :* sd2) = case (isStrict n1, isStrict n2) of
@@ -939,9 +941,12 @@ plusDmd (n1 :* sd1) (n2 :* sd2) = case (isStrict n1, isStrict n2) of
 
 -- | Denotes '∪' on lower bounds and '+' on upper bounds on 'SubDemand'.
 lubPlusSubDmd :: SubDemand -> SubDemand -> SubDemand
--- Handle seqSubDmd (just an optimisation, the general case would do the same)
-lubPlusSubDmd (Poly Unboxed C_00) d2                  = d2
-lubPlusSubDmd d1                  (Poly Unboxed C_00) = d1
+-- Handle botSubDmd (just an optimisation, the general case would do the same)
+lubPlusSubDmd (Poly Unboxed C_10) d2                  = d2
+lubPlusSubDmd d1                  (Poly Unboxed C_10) = d1
+-- Handle topSubDmd (just an optimisation, the general case would do the same)
+lubPlusSubDmd d@(Poly Boxed C_0N) _                   = d
+lubPlusSubDmd _                   d@(Poly Boxed C_0N) = d
 -- Handle Prod
 lubPlusSubDmd (Prod b1 ds1) (Poly b2 n2)
   | let !d = polyFieldDmd n2
@@ -964,10 +969,9 @@ lubPlusSubDmd _            _            = topSubDmd
 
 -- | Denotes '∪' on lower bounds and '+' on upper bounds on 'Demand'.
 lubPlusDmd :: Demand -> Demand -> Demand
--- The first two equations handle the special case of bottom demands:
-lubPlusDmd BotDmd dmd    = dmd
-lubPlusDmd dmd    BotDmd = dmd
--- This will be rather simple compared to the mess in plusSubDmd:
+-- Handle botDmd (just an optimisation, the general case would do the same)
+lubPlusDmd BotDmd      dmd         = dmd
+lubPlusDmd dmd         BotDmd      = dmd
 lubPlusDmd (n1 :* sd1) (n2 :* sd2) = lubPlusCard n1 n2 :* lubPlusSubDmd sd1 sd2
 
 -- | Used to suppress pretty-printing of an uninformative demand

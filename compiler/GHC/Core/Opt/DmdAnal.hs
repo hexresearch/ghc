@@ -407,7 +407,7 @@ dmdAnal' env dmd (App fun arg)
 --         , text "arg dmd =" <+> ppr arg_dmd
 --         , text "arg dmd_ty =" <+> ppr arg_ty
 --         , text "res dmd_ty =" <+> ppr res_ty
---         , text "overall res dmd_ty =" <+> ppr (res_ty `bothDmdType` arg_ty) ])
+--         , text "overall res dmd_ty =" <+> ppr (res_ty `plusDmdType` arg_ty) ])
     WithDmdType (res_ty `plusDmdType` arg_ty) (App fun' arg')
 
 dmdAnal' env dmd (Lam var body)
@@ -570,7 +570,8 @@ dmdAnalSumAlt env dmd case_bndr (Alt con bndrs rhs)
         (!_scrut_sd, dmds') = addCaseBndrDmd case_bndr_sd dmds
         -- Do not put a thunk into the Alt
         !new_ids            = setBndrsDemandInfo bndrs dmds'
-  = WithDmdType alt_ty (Alt con new_ids rhs')
+  = -- pprTrace "dmdAnalSumAlt" (ppr con $$ ppr case_bndr $$ ppr dmd $$ ppr alt_ty) $
+    WithDmdType alt_ty (Alt con new_ids rhs')
 
 -- Precondition: The SubDemand is not a Call
 -- See Note [Demand on the scrutinee of a product case]
@@ -582,6 +583,7 @@ addCaseBndrDmd :: SubDemand -- On the case binder
                             -- and final demands for the components of the constructor
 addCaseBndrDmd case_sd fld_dmds
   | Just (_, ds) <- viewProd (length fld_dmds) scrut_sd
+  -- , pprTrace "addCaseBndrDmd" (ppr case_sd $$ ppr fld_dmds $$ ppr scrut_sd) True
   = (scrut_sd, ds)
   | otherwise
   = pprPanic "was a call demand" (ppr case_sd $$ ppr fld_dmds) -- See the Precondition
@@ -830,7 +832,8 @@ dmdTransform :: AnalEnv   -- ^ The analysis environment
 dmdTransform env var sd
   -- Data constructors
   | isDataConWorkId var
-  = dmdTransformDataConSig (idArity var) sd
+  = -- pprTraceWith "dmdTransform:DataCon" (\ty -> ppr var $$ ppr sd $$ ppr ty) $
+    dmdTransformDataConSig (idArity var) sd
   -- Dictionary component selectors
   -- Used to be controlled by a flag.
   -- See #18429 for some perf measurements.
