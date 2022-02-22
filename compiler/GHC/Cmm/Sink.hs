@@ -5,8 +5,9 @@
 {-# OPTIONS_GHC -ddump-simpl -ddump-to-file -ddump-stg -ddump-stg-final #-}
 
 module GHC.Cmm.Sink (
-     cmmSink
-  ) where
+      cmmSink
+    , SinkAliasFlag(..)
+    ) where
 
 import GHC.Prelude
 
@@ -32,6 +33,8 @@ import Data.Maybe
 import GHC.Exts (inline)
 
 import GHC.Utils.Outputable
+import GHC.Utils.Misc (fstOf3, thdOf3)
+import GHC.Plugins (sndOf3)
 
 -- -----------------------------------------------------------------------------
 -- Sinking and inlining
@@ -157,13 +160,20 @@ type Assignments = [Assignment]
   --     y = e2
   --     x = e1
 
-cmmSink :: Platform -> CmmGraph -> CmmGraph
-cmmSink platform graph = ofBlockList (g_entry graph) $ sink mapEmpty $ blocks
+-- | Should we be more aggresive when sinking by running a aliasing analysis.
+data SinkAliasFlag = SinkWithAliasAnalysis | SinkWithoutAliasAnalysis deriving Eq
+
+cmmSink :: Platform -> SinkAliasFlag -> CmmGraph -> CmmGraph
+cmmSink platform alias_flag graph = ofBlockList (g_entry graph) $ sink mapEmpty $ blocks
   where
+  do_alias = alias_flag == SinkWithAliasAnalysis
   liveness = cmmLocalLivenessL platform graph
-  hp_aliases = cmmHpAlias platform graph
+  hp_aliases = if do_alias
+                then Just $ cmmHpAlias platform graph
+                else Nothing
   getLive l = mapFindWithDefault emptyLRegSet l liveness
-  getHps l = mapFindWithDefault mempty l hp_aliases -- Things which alias to Hp on entry.
+  getHps :: Label -> Maybe HpSet
+  getHps l = mapFindWithDefault mempty l <$> hp_aliases -- Things which alias to Hp on entry.
 
   blocks = revPostorder graph
 
@@ -184,12 +194,12 @@ cmmSink platform graph = ofBlockList (g_entry graph) $ sink mapEmpty $ blocks
       -- the node.  This will help us decide whether we can inline
       -- an assignment in the current node or not.
       live = IntSet.unions (map getLive succs)
-      hps = getHps lbl :: HpSet
+      hps = getHps lbl :: Maybe HpSet
       live_middle = gen_killL platform last live
-      (final_hps, ann_middles) = annotate platform live_middle hps (blockToList middle)
+      ann_middle = annotate platform live_middle hps (blockToList middle) :: AnnotatedNodes
 
       -- Now sink and inline in this block
-      (middle', assigs) = walk platform ann_middles (mapFindWithDefault [] lbl sunk)
+      (middle', assigs) = walk platform ann_middle (mapFindWithDefault [] lbl sunk)
       fold_last = constantFoldNode platform last
       (final_last, assigs') = tryToInline platform live fold_last assigs
 
@@ -211,7 +221,7 @@ cmmSink platform graph = ofBlockList (g_entry graph) $ sink mapEmpty $ blocks
            _ -> False
 
       -- Now, drop any assignments that we will not sink any further.
-      (dropped_last, assigs'') = dropAssignments platform final_hps drop_if init_live_sets assigs'
+      (dropped_last, assigs'') = dropAssignments platform (finalHpsFromAnnotatedNodes ann_middle) drop_if init_live_sets assigs'
 
       drop_if :: (LocalReg, CmmExpr, AbsMem)
                       -> [LRegSet] -> (Bool, [LRegSet])
@@ -261,19 +271,27 @@ isTrivial platform (CmmReg (CmmGlobal r)) = -- see Note [Inline GlobalRegs?]
 isTrivial _ (CmmLit _) = True
 isTrivial _ _          = False
 
---
--- annotate each node with the set of registers live *after* the node
---
-annotate :: Platform -> LRegSet -> HpSet -> [CmmNode O O] -> (HpSet, [(LRegSet, HpSet,CmmNode O O)])
+-- | We don't use HpAliasing at below -O2 by default so we only annotate nodes with aliases if needed.
+type AnnotatedNodes = Either LiveAnnotated LiveHpAliasAnnotated
+type LiveAnnotated = [(LRegSet, CmmNode O O)] -- ^ Annotated with registers live *after* entry.
+type LiveHpAliasAnnotated = (HpSet, [(LRegSet, HpSet,CmmNode O O)]) -- ^ Annotated with registers live/HpAliases *after* entry.
+
+finalHpsFromAnnotatedNodes :: Either a1 (HpSet, b) -> Maybe HpSet
+finalHpsFromAnnotatedNodes (Left _) = Nothing
+finalHpsFromAnnotatedNodes (Right (final_hps,_)) = Just final_hps
+
+
+annotate :: Platform -> LRegSet -> Maybe HpSet -> [CmmNode O O] -> AnnotatedNodes
 annotate platform live hp_set nodes = annotateHps platform hp_set $ annotateLive platform live nodes
 
-annotateLive :: Platform -> LRegSet -> [CmmNode O O] -> [(LRegSet, CmmNode O O)]
+-- | annotate each node with the set of registers live *after* the node
+annotateLive :: Platform -> LRegSet -> [CmmNode O O] -> LiveAnnotated
 annotateLive platform live nodes = snd $ foldr ann (live,[]) nodes
   where ann n (live,nodes) = (gen_killL platform n live, (live,n) : nodes)
 
-annotateHps :: Platform -> HpSet -> [(LRegSet, CmmNode O O)] -> (HpSet, [(LRegSet, HpSet,CmmNode O O)])
-annotateHps platform hp_set nodes = mapAccumL ann hp_set nodes
-  -- (s -> a -> (s, b)) -> s -> t a -> (s, t b)
+annotateHps :: Platform -> Maybe HpSet -> [(LRegSet, CmmNode O O)] -> AnnotatedNodes
+annotateHps _platform Nothing nodes = Left nodes
+annotateHps platform  (Just hp_set)  nodes = Right $ mapAccumL ann hp_set nodes
   where ann hps (live,n) = (node_exit_hps platform n hps, (live,hps,n))
 
 --
@@ -291,7 +309,7 @@ findJoinPoints blocks = mapFilter (>1) succ_counts
 -- filter the list of assignments to remove any assignments that
 -- are not live in a continuation.
 --
-filterAssignments :: Platform -> HpSet -> LRegSet -> Assignments -> Assignments
+filterAssignments :: Platform -> Maybe HpSet -> LRegSet -> Assignments -> Assignments
 filterAssignments platform hps live assigs = reverse (go assigs [])
   where go []             kept = kept
         go (a@(r,_,_):as) kept | needed    = go as (a:kept)
@@ -318,10 +336,28 @@ filterAssignments platform hps live assigs = reverse (go assigs [])
 --
 
 walk :: Platform
-     -> [(LRegSet, HpSet,CmmNode O O)]  -- nodes of the block, annotated with
+     -> AnnotatedNodes
+     -> Assignments                     -- The current list of
+                                        -- assignments we are sinking.
+                                        -- Earlier assignments may refer
+                                        -- to later ones.
+
+     -> ( Block CmmNode O O             -- The new block
+        , Assignments                   -- Assignments to sink further
+        )
+walk platform nodes assigs =
+  case nodes of
+    Left nodes' -> walk' platform nodes' snd fst (const Nothing) assigs
+    Right (_hps_exit,nodes') -> walk' platform nodes' thdOf3 fstOf3 (Just . sndOf3) assigs
+
+{-# INLINE walk' #-}
+walk' :: Platform
+     -> [a]                             -- nodes of the block, annotated with
                                         -- the set of registers live/things aliasing Hp *after*
                                         -- this node.
-
+     -> (a -> CmmNode O O)
+     -> (a -> LRegSet)
+     -> (a -> Maybe HpSet)
      -> Assignments                     -- The current list of
                                         -- assignments we are sinking.
                                         -- Earlier assignments may refer
@@ -331,10 +367,10 @@ walk :: Platform
         , Assignments                   -- Assignments to sink further
         )
 
-walk platform nodes assigs = go nodes emptyBlock assigs
+walk' platform nodes getNode getLiveSet getHpAliases assigs = go nodes emptyBlock assigs
  where
    go []               block as = (block, as)
-   go ((live,hps,node):ns) block as
+   go (node_info:ns) block as
     -- discard nodes representing dead assignment
     | shouldDiscard node live             = go ns block as
     -- sometimes only after simplification we can tell we can discard the node.
@@ -345,6 +381,9 @@ walk platform nodes assigs = go nodes emptyBlock assigs
     -- Try inlining, drop assignments and move on
     | otherwise                           = go ns block' as'
     where
+      live = getLiveSet node_info
+      hps = getHpAliases node_info
+      node = getNode node_info
       -- Simplify node
       node1 = constantFoldNode platform node
 
@@ -400,7 +439,7 @@ cmm_sink_sp.
 -- be profitable to sink assignments to global regs too, but the
 -- liveness analysis doesn't track those (yet) so we can't.
 --
-shouldSink :: Platform -> HpSet -> CmmNode e x -> Maybe Assignment
+shouldSink :: Platform -> Maybe HpSet -> CmmNode e x -> Maybe Assignment
 shouldSink platform hps (CmmAssign (CmmLocal r) e) | no_local_regs = Just (r, e, exprMemHp platform hps e)
   where no_local_regs = True -- foldRegsUsed (\_ _ -> False) True e
 shouldSink _ _ _other = Nothing
@@ -436,11 +475,11 @@ noOpAssignment node
 toNode :: Assignment -> CmmNode O O
 toNode (r,rhs,_) = CmmAssign (CmmLocal r) rhs
 
-dropAssignmentsSimple :: Platform -> (Assignment -> Bool) -> HpSet -> Assignments
+dropAssignmentsSimple :: Platform -> (Assignment -> Bool) -> Maybe HpSet -> Assignments
                       -> ([CmmNode O O], Assignments)
 dropAssignmentsSimple platform f hps  = dropAssignments platform hps (\a _ -> (f a, ())) ()
 
-dropAssignments :: Platform -> HpSet -> (Assignment -> s -> (Bool, s)) -> s -> Assignments
+dropAssignments :: Platform -> Maybe HpSet -> (Assignment -> s -> (Bool, s)) -> s -> Assignments
                 -> ([CmmNode O O], Assignments)
 dropAssignments platform hps should_drop state assigs
  = (dropped, reverse kept)
@@ -463,7 +502,6 @@ dropAssignments platform hps should_drop state assigs
 -- This also does constant folding for primops, since
 -- inlining opens up opportunities for doing so.
 
-{-# NOINLINE tryToInline #-}
 tryToInline
    :: forall x. Platform
    -> LRegSet                   -- set of registers live after this
@@ -671,7 +709,7 @@ okToInline _ _ _ = True
 
 -- | @conflicts (r,e) node@ is @False@ if and only if the assignment
 -- @r = e@ can be safely commuted past statement @node@.
-conflicts :: Platform -> HpSet -> Assignment -> CmmNode O x -> Bool
+conflicts :: Platform -> Maybe HpSet -> Assignment -> CmmNode O x -> Bool
 conflicts platform hps (r, rhs, addr) node
 
   -- (1) node defines registers used by rhs of assignment. This catches

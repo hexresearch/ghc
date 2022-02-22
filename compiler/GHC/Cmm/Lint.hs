@@ -70,9 +70,6 @@ lintCmmGraph g = do
       blocks = toBlockList g
       labels = setFromList (map entryLabel blocks)
    cmmLocalLiveness platform g `seq` mapM_ (lintCmmBlock labels) blocks
-
-   lintHpReads platform g `seq` return ()
-
    -- cmmLiveness throws an error if there are registers
    -- live on entry to the graph (i.e. undefined
    -- variables)
