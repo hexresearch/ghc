@@ -26,6 +26,8 @@ packageArgs = do
 
     cursesIncludeDir <- getSetting CursesIncludeDir
     cursesLibraryDir <- getSetting CursesLibDir
+    ffiIncludeDir  <- getSetting FfiIncludeDir
+    ffiLibraryDir  <- getSetting FfiLibDir
 
     mconcat
         --------------------------------- base ---------------------------------
@@ -98,6 +100,7 @@ packageArgs = do
         -------------------------------- ghcPrim -------------------------------
         , package ghcPrim ? mconcat
           [ builder (Cabal Flags) ? arg "include-ghc-prim"
+          , builder (Cabal Setup) ? cabalExtraDirs ffiIncludeDir ffiLibraryDir
 
           , builder (Cc CompileC) ? (not <$> flag CcLlvmBackend) ?
             input "**/cbits/atomic.c"  ? arg "-Wno-sync-nand" ]
@@ -280,8 +283,6 @@ rtsPackageArgs = package rts ? do
 
     let cArgs = mconcat
           [ rtsWarnings
-          , flag UseSystemFfi ? not (null ffiIncludeDir) ? arg ("-I" ++ ffiIncludeDir)
-          , flag WithLibdw ? not (null libdwIncludeDir) ? arg ("-I" ++ libdwIncludeDir)
           , arg "-fomit-frame-pointer"
           -- RTS *must* be compiled with optimisations. The INLINE_HEADER macro
           -- requires that functions are inlined to work as expected. Inlining
@@ -378,11 +379,7 @@ rtsPackageArgs = package rts ? do
         , builder Ghc ? ghcArgs
 
         , builder HsCpp ? pure
-          [ "-DTOP="             ++ show top
-          , "-DFFI_INCLUDE_DIR=" ++ show ffiIncludeDir
-          , "-DFFI_LIB_DIR="     ++ show ffiLibraryDir
-          , "-DFFI_LIB="         ++ show ffiLibName
-          , "-DLIBDW_LIB_DIR="   ++ show libdwLibraryDir ]
+          [ "-DTOP="             ++ show top ]
 
         , builder HsCpp ? flag WithLibdw ? arg "-DUSE_LIBDW"
         , builder HsCpp ? flag HaveLibMingwEx ? arg "-DHAVE_LIBMINGWEX" ]
