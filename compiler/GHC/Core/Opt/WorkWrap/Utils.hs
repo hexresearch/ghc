@@ -661,7 +661,7 @@ wantToUnboxResult fam_envs ty cpr
   = StopUnboxing
 
   where
-    -- | See Note [non-algebraic or open body type warning]
+    -- See Note [non-algebraic or open body type warning]
     open_body_ty_warning = warnPprTrace True "wantToUnboxResult: non-algebraic or open body type" (ppr ty) Nothing
 
 isLinear :: Scaled a -> Bool
@@ -1303,7 +1303,7 @@ isRecDataCon fam_envs fuel dc
       | otherwise
       = NonRecursiveOrUnsure
 
-    -- | PRECONDITION: tc_args has no recursive occs
+    -- PRECONDITION: tc_args has no recursive occs
     -- See Note [Detecting recursive data constructors], point (5)
     go_tc_app :: IntWithInf -> RecTcChecker -> TyCon -> [Type] -> IsRecDataConResult
     go_tc_app fuel rec_tc tc tc_args
