@@ -467,11 +467,24 @@ function determine_metric_baseline() {
   fi
 }
 
+function check_msys2_deps() {
+  # Ensure that GHC on Windows doesn't have any dynamic dependencies on msys2
+  case "$(uname)" in
+    MSYS_*|MINGW*)
+      sysroot="$(cygpath "$SYSTEMROOT")"
+      PATH="$sysroot/System32:$sysroot;$sysroot/Wbem" $@ \
+          || fail "'$@' failed; there may be unwanted dynamic dependencies."
+      ;;
+  esac
+}
+
 function test_make() {
   if [ -n "${CROSS_TARGET:-}" ]; then
     info "Can't test cross-compiled build."
     return
   fi
+
+  check_msys2_deps inplace/bin/ghc-stage2 --version
 
   run "$MAKE" test_bindist TEST_PREP=YES
   (unset $(compgen -v | grep CI_*);
@@ -524,6 +537,7 @@ function test_hadrian() {
     fi
   fi
 
+  check_msys2_deps _build/stage1/bin/ghc --version
 
   if [[ -n "${REINSTALL_GHC:-}" ]]; then
     run_hadrian \
