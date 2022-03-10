@@ -343,17 +343,18 @@ simple_app env e@(Lam {}) as@(_:_)
   = do_beta env zapped_bndrs body as
   where
     do_beta env (b:bs) body (a:as)
-      | (env', b') <- subst_opt_bndr env b
-        -- simpl binder before looking at its type
+      | -- simpl binder before looking at its type
         -- See Note [Dark corner with representation polymorphism]
-      , needsCaseBinding (idType b') (snd a)
+        needsCaseBinding (idType b') (snd a)
         -- This arg must not be inlined (side-effects) and cannot be let-bound,
         -- due to the let-can-float invariant. So simply case-bind it here.
       , let a' = simple_opt_clo env a
       = mkDefaultCase a' b' $ do_beta env' bs body as
 
-      | (env', mb_pr) <- simple_bind_pair env b Nothing a NotTopLevel
+      | (env', mb_pr) <- simple_bind_pair env b (Just b') a NotTopLevel
       = wrapLet mb_pr $ do_beta env' bs body as
+
+      where (env', b') = subst_opt_bndr env b
 
     do_beta env bs body as = simple_app env (mkLams bs body) as
 

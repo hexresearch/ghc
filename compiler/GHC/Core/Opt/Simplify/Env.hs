@@ -429,8 +429,8 @@ Note [LetFloats]
 ~~~~~~~~~~~~~~~~
 The LetFloats is a bunch of bindings, classified by a FloatFlag.
 
-This can contain bindings that do not satisfy the let-can-float invariant,
-but then the flag is guaranteed to be FltCareful.
+The `FloatFlag` contains summary information about the bindings, see the data
+type declaration of `FloatFlag`
 
 Examples
 
@@ -454,19 +454,22 @@ type JoinFloats = OrdList JoinFloat
 data FloatFlag
   = FltLifted   -- All bindings are lifted and lazy *or*
                 --     consist of a single primitive string literal
-                --  Hence ok to float to top level, or recursive
+                -- Hence ok to float to top level, or recursive
+                -- NB: consequence: all bindings satisfy let-can-float invariant
 
   | FltOkSpec   -- All bindings are FltLifted *or*
                 --      strict (perhaps because unlifted,
                 --      perhaps because of a strict binder),
                 --        *and* ok-for-speculation
-                --  Hence ok to float out of the RHS
-                --  of a lazy non-recursive let binding
-                --  (but not to top level, or into a rec group)
+                -- Hence ok to float out of the RHS
+                -- of a lazy non-recursive let binding
+                -- (but not to top level, or into a rec group)
+                -- NB: consequence: all bindings satisfy let-can-float invariant
 
   | FltCareful  -- At least one binding is strict (or unlifted)
                 --      and not guaranteed cheap
-                --      Do not float these bindings out of a lazy let
+                -- Do not float these bindings out of a lazy let!
+                -- NB: some bindings may not satisfy let-can-float
 
 instance Outputable LetFloats where
   ppr (LetFloats binds ff) = ppr ff $$ ppr (fromOL binds)

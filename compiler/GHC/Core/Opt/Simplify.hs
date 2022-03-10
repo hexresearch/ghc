@@ -737,9 +737,8 @@ prepareRhs env top_lvl occ rhs0
              ; return (is_exp, floats, App rhs' (Type ty)) }
     go n_val_args (App fun arg)
         = do { (is_exp, floats1, fun') <- go (n_val_args+1) fun
-             ; let arg_ty = exprType arg
              ; if is_exp
-               then do { (floats2, arg') <- makeTrivial env top_lvl topDmd occ arg arg_ty
+               then do { (floats2, arg') <- makeTrivial env top_lvl topDmd occ arg
                        ; return (True, floats1 `addLetFlts` floats2, App fun' arg') }
                else return (False, emptyLetFloats, App fun arg)
              }
@@ -772,7 +771,7 @@ prepareRhs env top_lvl occ rhs0
 
 makeTrivialArg :: HasDebugCallStack => SimplEnv -> ArgSpec -> SimplM (LetFloats, ArgSpec)
 makeTrivialArg env arg@(ValArg { as_arg = e, as_dmd = dmd })
-  = do { (floats, e') <- makeTrivial env NotTopLevel dmd (fsLit "arg") e (exprType e)
+  = do { (floats, e') <- makeTrivial env NotTopLevel dmd (fsLit "arg") e
        ; return (floats, arg { as_arg = e' }) }
 makeTrivialArg _ arg
   = return (emptyLetFloats, arg)  -- CastBy, TyArg
@@ -780,18 +779,18 @@ makeTrivialArg _ arg
 makeTrivial :: HasDebugCallStack
             => SimplEnv -> TopLevelFlag -> Demand
             -> FastString  -- ^ A "friendly name" to build the new binder from
-            -> OutExpr -> OutType
+            -> OutExpr
             -> SimplM (LetFloats, OutExpr)
 -- Binds the expression to a variable, if it's not trivial, returning the variable
 -- For the Demand argument, see Note [Keeping demand info in StrictArg Plan A]
-makeTrivial env top_lvl dmd occ_fs expr expr_ty
+makeTrivial env top_lvl dmd occ_fs expr
   | exprIsTrivial expr                          -- Already trivial
   || not (bindingOk top_lvl expr expr_ty)       -- Cannot trivialise
                                                 --   See Note [Cannot trivialise]
   = return (emptyLetFloats, expr)
 
   | Cast expr' co <- expr
-  = do { (floats, triv_expr) <- makeTrivial env top_lvl dmd occ_fs expr' (exprType expr')
+  = do { (floats, triv_expr) <- makeTrivial env top_lvl dmd occ_fs expr'
        ; return (floats, Cast triv_expr co) }
 
   | otherwise
@@ -800,6 +799,7 @@ makeTrivial env top_lvl dmd occ_fs expr expr_ty
        ; return (floats, Var new_id) }
   where
     id_info = vanillaIdInfo `setDemandInfo` dmd
+    expr_ty = exprType expr
 
 makeTrivialBinding :: HasDebugCallStack
                    => SimplEnv -> TopLevelFlag
@@ -3526,7 +3526,7 @@ mkDupableContWithDmds env dmds
         ; (floats1, cont') <- mkDupableContWithDmds env dmds cont
         ; let env' = env `setInScopeFromF` floats1
         ; (_, se', arg') <- simplArg env' dup se arg
-        ; (let_floats2, arg'') <- makeTrivial env NotTopLevel dmd (fsLit "karg") arg' (exprType arg')
+        ; (let_floats2, arg'') <- makeTrivial env NotTopLevel dmd (fsLit "karg") arg'
         ; let all_floats = floats1 `addLetFloats` let_floats2
         ; return ( all_floats
                  , ApplyToVal { sc_arg = arg''

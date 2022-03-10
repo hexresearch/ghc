@@ -194,14 +194,11 @@ fiExpr platform to_drop ann_expr@(_,AnnApp {})
     add_arg :: (Type,FreeVarSet) -> CoreExprWithFVs -> (Type,FreeVarSet)
     add_arg (fun_ty, extra_fvs) (_, AnnType ty)
       = (piResultTy fun_ty ty, extra_fvs)
-
     add_arg (fun_ty, extra_fvs) (arg_fvs, arg)
       | noFloatIntoArg arg
-      = (res_ty, extra_fvs `unionDVarSet` arg_fvs)
+      = (funResultTy fun_ty, extra_fvs `unionDVarSet` arg_fvs)
       | otherwise
-      = (res_ty, extra_fvs)
-      where
-       (_, _, res_ty) = splitFunTy fun_ty
+      = (funResultTy fun_ty, extra_fvs)
 
 {- Note [Dead bindings]
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -579,7 +576,7 @@ noFloatIntoRhs is_rec bndr rhs
   = isRec is_rec -- Joins are one-shot iff non-recursive
 
   | isUnliftedType (idType bndr)
-  = True  -- See Note [Do not destroy the let-can-float invariant]
+  = True  -- Preserve let-can-float invariant, see Note [noFloatInto considerations]
 
   | otherwise
   = noFloatIntoArg rhs
@@ -600,7 +597,7 @@ noFloatIntoArg expr
 {- Note [noFloatInto considerations]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 When do we want to float bindings into
-   - noFloatIntoRHs: the RHS of a let-binding
+   - noFloatIntoRhs: the RHS of a let-binding
    - noFloatIntoArg: the argument of a function application
 
 Definitely don't float into RHS if it has unlifted type;

@@ -349,7 +349,7 @@ dmdAnalStar env (n :* sd) e
   -- NB: (:*) expands AbsDmd and BotDmd as needed
   -- See Note [Analysing with absent demand]
   | WithDmdType dmd_ty e' <- dmdAnal env sd e
-  = let -- unlifted arguments are kinda strict:
+  = let -- unlifted arguments are strict by construction:
         n' | mightBeUnliftedType (exprType e') = C_10 `plusCard` n
            | otherwise = n
     in (toPlusDmdArg $ multDmdType n' dmd_ty, e')
