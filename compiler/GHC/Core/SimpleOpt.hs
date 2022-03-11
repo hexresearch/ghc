@@ -1141,7 +1141,7 @@ exprIsConApp_maybe (in_scope, id_unf) expr
        -- the case binder can then be substituted into the case alternaties.
        = let arg' = subst_expr subst arg
              bndr = uniqAway (subst_in_scope subst) (mkWildValBinder Many arg_type)
-             float = FloatCaseDefault arg' bndr
+             float = FloatCase arg' bndr DEFAULT []
              subst' = subst_extend_in_scope subst bndr
          in go subst' (float:floats) fun (CC (Var bndr : args) co)
        | otherwise

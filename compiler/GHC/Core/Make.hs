@@ -70,7 +70,7 @@ import GHC.Types.Literal
 import GHC.Types.Unique.Supply
 
 import GHC.Core
-import GHC.Core.Utils ( exprType, mkDefaultCase, mkSingleAltCase, bindNonRec )
+import GHC.Core.Utils ( exprType, mkSingleAltCase, bindNonRec )
 import GHC.Core.Type
 import GHC.Core.Coercion ( isCoVar )
 import GHC.Core.DataCon  ( DataCon, dataConWorkId )
@@ -597,19 +597,15 @@ data FloatBind
   | FloatCase CoreExpr Id AltCon [Var]
       -- case e of y { C ys -> ... }
       -- See Note [Floating single-alternative cases] in GHC.Core.Opt.SetLevels
-  | FloatCaseDefault CoreExpr Id
 
 instance Outputable FloatBind where
   ppr (FloatLet b) = text "LET" <+> ppr b
   ppr (FloatCase e b c bs) = hang (text "CASE" <+> ppr e <+> text "of" <+> ppr b)
                                 2 (ppr c <+> ppr bs)
-  ppr (FloatCaseDefault e b) = hang (text "CASE" <+> ppr e <+> text "of" <+> ppr b)
-                                2 (text "DEFAULT")
 
 wrapFloat :: FloatBind -> CoreExpr -> CoreExpr
 wrapFloat (FloatLet defns)       body = Let defns body
 wrapFloat (FloatCase e b con bs) body = mkSingleAltCase e b con bs body
-wrapFloat (FloatCaseDefault e b) body = mkDefaultCase e b body
 
 -- | Applies the floats from right to left. That is @wrapFloats [b1, b2, …, bn]
 -- u = let b1 in let b2 in … in let bn in u@
@@ -623,7 +619,6 @@ bindBindings (Rec bnds) = map fst bnds
 floatBindings :: FloatBind -> [Var]
 floatBindings (FloatLet bnd) = bindBindings bnd
 floatBindings (FloatCase _ b _ bs) = b:bs
-floatBindings (FloatCaseDefault _ b) = [b]
 
 {-
 ************************************************************************

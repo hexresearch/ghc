@@ -757,11 +757,9 @@ wrapFloats (FB _ _ fl : bs) e = wrapFloats bs (wrapFloat fl e)
 
 floatIsDupable :: Platform -> FloatBind -> Bool
 floatIsDupable platform (FloatCase scrut _ _ _) = exprIsDupable platform scrut
-floatIsDupable platform (FloatCaseDefault scrut _) = exprIsDupable platform scrut
 floatIsDupable platform (FloatLet (Rec prs))    = all (exprIsDupable platform . snd) prs
 floatIsDupable platform (FloatLet (NonRec _ r)) = exprIsDupable platform r
 
 floatIsCase :: FloatBind -> Bool
 floatIsCase (FloatCase {}) = True
-floatIsCase (FloatCaseDefault {}) = True
 floatIsCase (FloatLet {})  = False
