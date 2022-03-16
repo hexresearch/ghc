@@ -35,7 +35,13 @@ instance NFData   ArMode
 -- NOTE: Make sure to appropriately update 'arFlagsCount' when changing 'args'.
 -- | Default command line arguments for invoking the archiving utility @ar@.
 args :: (ShakeValue c, ShakeValue b) => ArMode -> Args c b
-args Pack   = mconcat [ arg "q", arg =<< getOutput, getInputs ]
+args Pack   = mconcat [ arg "q", maybeL, arg =<< getOutput, getInputs ]
+  where
+      -- When building on platforms which don't support object merging
+      -- we must use the -L flag supported by llvm-ar, which ensures that
+      -- .a files added to the archive are merged into the resulting archive,
+      -- not added as a single file. This requires that we are using llvm-ar
+    maybeL = notStage0 ? windows ? arg "-L"
 args Unpack = mconcat [ arg "x", arg =<< getInput ]
 
 -- This count includes "q" and the output file argumentes in 'args'. This is
