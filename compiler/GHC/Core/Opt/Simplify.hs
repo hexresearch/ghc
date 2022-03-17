@@ -1470,6 +1470,7 @@ rebuild env expr cont
 
 completeBindX :: SimplEnv
               -> InId -> OutExpr   -- Bind this Id to this (simplified) expression
+                                   -- (the let-can-float invariant may not be satisfied)
               -> [InId] -> InExpr  -- In this lambda
               -> SimplCont         -- Consumed by this continuation
               -> SimplM (SimplFloats, OutExpr)
