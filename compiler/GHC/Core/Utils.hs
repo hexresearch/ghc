@@ -1639,7 +1639,7 @@ app_ok primop_ok fun args
 
       _  -- Unlifted types
          -- c.f. the Var case of exprIsHNF
-         | mightBeUnliftedType (idType fun)
+         | Just False <- isLiftedType_maybe (idType fun)
          -> assertPpr (n_val_args == 0) (ppr fun $$ ppr args)
             True  -- Our only unlifted types are Int# etc, so will have
                   -- no value args.  The assert is just to check this.
