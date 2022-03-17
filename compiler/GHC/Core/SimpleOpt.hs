@@ -1136,9 +1136,20 @@ exprIsConApp_maybe (in_scope, id_unf) expr
        , not (isTypeArg arg) && needsCaseBinding arg_type arg
        -- An unlifted argument that’s not ok for speculation must not simply be
        -- put into the args, as these are going to be substituted into the case
-       -- alternatives, and possibly lost on the way. Instead, we need need to
+       -- alternatives, and possibly lost on the way.
+       --
+       -- Instead, we need need to
        -- make sure they are evaluated right here (using a case float), and
        -- the case binder can then be substituted into the case alternaties.
+       --
+       -- Example:
+       -- Simplifying  case Mk# exp of Mk# a → rhs
+       -- will use     exprIsConApp_maybe (Mk# exp)
+       --
+       -- Bad:  returning (Mk#, [exp]) with no floats
+       --       simplifier produces rhs[exp/a], changing semantics if exp is not ok-for-spec
+       -- Good: returning (Mk#, [x]) with a float of  case exp of x { DEFAULT -> [] }
+       --       simplifier produces case exp of a { DEFAULT -> exp[x/a] }
        = let arg' = subst_expr subst arg
              bndr = uniqAway (subst_in_scope subst) (mkWildValBinder Many arg_type)
              float = FloatCase arg' bndr DEFAULT []
