@@ -1458,7 +1458,7 @@ rebuild env expr cont
 
       StrictBind { sc_bndr = b, sc_bndrs = bs, sc_body = body
                  , sc_env = se, sc_cont = cont }
-        -> completeStrictBind (se `setInScopeFromE` env) b expr bs body cont
+        -> completeBindX (se `setInScopeFromE` env) b expr bs body cont
 
       ApplyToTy  { sc_arg_ty = ty, sc_cont = cont}
         -> rebuild env (App expr (Type ty)) cont
@@ -1468,12 +1468,12 @@ rebuild env expr cont
         -> do { (_, _, arg') <- simplArg env dup_flag se arg
               ; rebuild env (App expr arg') cont }
 
-completeStrictBind :: SimplEnv
-                   -> InId -> OutExpr   -- Bind this Id to this (simplified) expression
-                   -> [InId] -> InExpr  -- In this lambda
-                   -> SimplCont         -- Consumed by this continuation
-                   -> SimplM (SimplFloats, OutExpr)
-completeStrictBind env bndr rhs bndrs body cont
+completeBindX :: SimplEnv
+              -> InId -> OutExpr   -- Bind this Id to this (simplified) expression
+              -> [InId] -> InExpr  -- In this lambda
+              -> SimplCont         -- Consumed by this continuation
+              -> SimplM (SimplFloats, OutExpr)
+completeBindX env bndr rhs bndrs body cont
   | needsCaseBinding (idType bndr) rhs -- Enforcing the let-can-float-invariant
   = do { (env1, bndr1) <- simplNonRecBndr env bndr
        ; (floats, expr') <- simplLam env1 bndrs body cont
@@ -1636,7 +1636,7 @@ simplLam env (bndr:bndrs) body (ApplyToVal { sc_arg = arg, sc_env = arg_se
   | isSimplified dup  -- Don't re-simplify if we've simplified it once
                       -- See Note [Avoiding exponential behaviour]
   =  do { tick (BetaReduction bndr)
-        ; completeStrictBind env bndr arg bndrs body cont }
+        ; completeBindX env bndr arg bndrs body cont }
 
   | otherwise         -- See Note [Avoiding exponential behaviour]
   = do  { tick (BetaReduction bndr)

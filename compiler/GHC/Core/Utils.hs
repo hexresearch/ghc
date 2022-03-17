@@ -1941,7 +1941,10 @@ exprIsHNFlike is_con is_con_unf = is_hnf_like
       | isValArg a              =
         app_is_value f (nva + 1) &&
         not (needsCaseBinding (exprType a) a)
-          -- we recurse first, since the arity-check is likely cheaper
+          -- For example  f (x /# y)  where f has arity two, and the first
+          -- argument is unboxed. This is not a value!
+          -- But  f 34#  is a value.
+          -- NB: Check app_is_value first, the arity check is cheaper
       | otherwise               = app_is_value f nva
     app_is_value _          _   = False
 
