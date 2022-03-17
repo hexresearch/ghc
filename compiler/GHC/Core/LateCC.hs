@@ -43,11 +43,19 @@ doCoreProgram env binds = flip evalState newCostCentreState $ do
     mapM (doBind env) binds
 
 doBind :: Env -> CoreBind -> M CoreBind
-doBind env (NonRec b rhs) = NonRec b <$> doBndr env b rhs
-doBind env (Rec bs) = Rec <$> mapM doPair bs
+doBind env (NonRec b rhs) =
+  let b' = (updateUnfolding b)
+  in NonRec b' <$> doBndr env b' rhs
+doBind env (Rec bs) =
+  Rec <$> mapM doPair bs
   where
     doPair :: ((Id, CoreExpr) -> M (Id, CoreExpr))
-    doPair (b,rhs) = (b,) <$> doBndr env b rhs
+    doPair (b,rhs) =
+      let b' = (updateUnfolding b)
+      in (b',) <$> doBndr env b' rhs
+
+updateUnfolding :: Id -> Id
+updateUnfolding b = setIdUnfolding b (mkUnfoldingStable $ realIdUnfolding b)
 
 doBndr :: Env -> Id -> CoreExpr -> M CoreExpr
 doBndr env bndr rhs = do

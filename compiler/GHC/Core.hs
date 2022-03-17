@@ -67,6 +67,7 @@ module GHC.Core (
         isStableUnfolding, isInlineUnfolding, isBootUnfolding,
         hasCoreUnfolding, hasSomeUnfolding,
         canUnfold, neverUnfoldGuidance, isStableSource,
+        mkUnfoldingStable,
 
         -- * Annotated expression data types
         AnnExpr, AnnExpr'(..), AnnBind(..), AnnAlt(..),
@@ -1569,6 +1570,15 @@ hasCoreUnfolding _                  = False
 canUnfold :: Unfolding -> Bool
 canUnfold (CoreUnfolding { uf_guidance = g }) = not (neverUnfoldGuidance g)
 canUnfold _                                   = False
+
+mkUnfoldingStable :: Unfolding -> Unfolding
+mkUnfoldingStable unf@CoreUnfolding{} = unf { uf_src = mkUnfSrcStable (uf_src unf) }
+mkUnfoldingStable unf = unf
+
+mkUnfSrcStable :: UnfoldingSource -> UnfoldingSource
+mkUnfSrcStable InlineRhs        = InlineStable
+mkUnfSrcStable InlineStable     = InlineStable
+mkUnfSrcStable InlineCompulsory = InlineCompulsory
 
 {- Note [Fragile unfoldings]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
