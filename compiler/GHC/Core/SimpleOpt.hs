@@ -351,7 +351,7 @@ simple_app env e@(Lam {}) as@(_:_)
       , let a' = simple_opt_clo env a
       = mkDefaultCase a' b' $ do_beta env' bs body as
 
-      | (env', mb_pr) <- simple_bind_pair env b (Just b') a NotTopLevel
+      | (env'', mb_pr) <- simple_bind_pair env' b (Just b') a NotTopLevel
       = wrapLet mb_pr $ do_beta env' bs body as
 
       where (env', b') = subst_opt_bndr env b
