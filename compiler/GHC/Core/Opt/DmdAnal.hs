@@ -340,7 +340,7 @@ anticipateANF e
   | Just False <- isLiftedType_maybe (exprType e) = case_bind
   | otherwise                                     = let_bind
   where
-    case_bind n = C_11       -- evaluated exactly once
+    case_bind _ = C_11       -- evaluated exactly once
     let_bind    = oneifyCard -- evaluated at most once
 
 -- Do not process absent demands
