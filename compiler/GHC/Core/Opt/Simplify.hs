@@ -414,33 +414,17 @@ simplNonRecX env bndr new_rhs
            , extendIdSubst env bndr (DoneEx new_rhs Nothing))
 
   | otherwise
-  = do  { (env', bndr') <- simplBinder env bndr
-        ; completeNonRecX NotTopLevel env' bndr bndr' new_rhs }
-          -- NotTopLevel: simplNonRecX is only used for NotTopLevel things
-          --
-          -- isStrictId: use bndr' because the InId bndr might not have
-          -- a fixed runtime representation, which isStrictId doesn't expect
-          -- c.f. Note [Dark corner with representation polymorphism]
-
---------------------------
-completeNonRecX :: TopLevelFlag -> SimplEnv
-                -> InId                 -- Old binder; not a JoinId
-                -> OutId                -- New binder
-                -> OutExpr              -- Simplified RHS
-                -> SimplM (SimplFloats, SimplEnv)    -- The new binding is in the floats
--- Precondition: rhs satisfies the let/app invariant
---               See Note [Core let/app invariant] in GHC.Core
-
-completeNonRecX top_lvl env old_bndr new_bndr new_rhs
-  = assertPpr (not (isJoinId new_bndr)) (ppr new_bndr) $
-    do  { (rhs_floats, rhs1) <- prepareBinding env top_lvl NonRecursive is_strict
-                                               new_bndr (emptyFloats env) new_rhs
-        ; (bind_float, env2) <- completeBind (env `setInScopeFromF` rhs_floats)
+  = do  { (env1, new_bndr)   <- simplBinder env bndr
+        ; let is_strict = isStrictId new_bndr
+              -- isStrictId: use new_bndr because the InId bndr might not have
+              -- a fixed runtime representation, which isStrictId doesn't expect
+              -- c.f. Note [Dark corner with representation polymorphism]
+        ; (rhs_floats, rhs1) <- prepareBinding env1 NotTopLevel NonRecursive is_strict
+                                               new_bndr (emptyFloats env1) new_rhs
+        ; (bind_float, env2) <- completeBind (env1 `setInScopeFromF` rhs_floats)
                                              (BC_Let NotTopLevel NonRecursive)
-                                             old_bndr new_bndr rhs1
+                                             bndr new_bndr rhs1
         ; return (rhs_floats `addFloats` bind_float, env2) }
-  where
-    is_strict = isStrictId new_bndr
 
 
 {- *********************************************************************
