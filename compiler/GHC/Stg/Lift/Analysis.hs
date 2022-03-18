@@ -325,7 +325,7 @@ tagSkeletonRhs bndr (StgRhsClosure fvs ccs upd bndrs body)
 -- computes the answer in form of a 'Card'.
 rhsCard :: Id -> Card
 rhsCard bndr
-  | is_thunk  = oneifyCard n
+  | is_thunk  = fst (splitManyCard n)
   | otherwise = peelManyCalls (idArity bndr) cd
   where
     is_thunk = idArity bndr == 0

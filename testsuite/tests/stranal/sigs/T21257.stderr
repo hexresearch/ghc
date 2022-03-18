@@ -1,0 +1,21 @@
+
+==================== Strictness signatures ====================
+T21257.$trModule:
+T21257.g: <LP(ML,ML)>
+T21257.g2: <SP(1L,A)>
+
+
+
+==================== Cpr signatures ====================
+T21257.$trModule:
+T21257.g: 1
+T21257.g2:
+
+
+
+==================== Strictness signatures ====================
+T21257.$trModule:
+T21257.g: <LP(ML,ML)>
+T21257.g2: <1P(1L,A)>
+
+

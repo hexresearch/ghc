@@ -285,7 +285,7 @@ dmdAnalBindLetUp top_lvl env id rhs anal_body = WithDmdType final_ty (R (NonRec 
 
     id_dmd'            = finaliseLetBoxity (ae_fam_envs env) (idType id) id_dmd
     !id'               = setBindIdDemandInfo top_lvl id id_dmd'
-    (rhs_ty, rhs')     = dmdAnalStar env (dmdTransformThunkDmd rhs id_dmd') rhs
+    (rhs_ty, rhs')     = dmdAnalStar env id_dmd' rhs
 
     -- See Note [Absence analysis for stable unfoldings and RULES]
     rule_fvs           = bndrRuleAndUnfoldingIds id
@@ -335,13 +335,6 @@ dmdAnalBindLetDown top_lvl env dmd bind anal_body = case bind of
         -- the vanilla call demand seem to be due to (b).  So we don't
         -- bother to re-analyse the RHS.
 
--- If e is complicated enough to become a thunk, its contents will be evaluated
--- at most once, so oneify it.
-dmdTransformThunkDmd :: CoreExpr -> Demand -> Demand
-dmdTransformThunkDmd e
-  | exprIsTrivial e = id
-  | otherwise       = oneifyDmd
-
 -- Do not process absent demands
 -- Otherwise act like in a normal demand analysis
 -- See ↦* relation in the Cardinality Analysis paper
@@ -355,7 +348,20 @@ dmdAnalStar env (n :* sd) e
   | WithDmdType dmd_ty e' <- dmdAnal env sd e
   = assertPpr (mightBeLiftedType (exprType e) || exprOkForSpeculation e) (ppr e)
     -- The argument 'e' should satisfy the let/app invariant
-    (toPlusDmdArg $ multDmdType n dmd_ty, e')
+    -- See Note [Anticipating ANF in demand analysis]
+    (toPlusDmdArg $ anticipateANF e n dmd_ty, e')
+
+-- | Mimic the effect of 'GHC.Core.Prep.mkFloat', which turns a non-trivial
+-- argument expression/RHS into a proper let-bound thunk.
+anticipateANF :: CoreExpr -> Card -> DmdType -> DmdType
+-- See Note [Anticipating ANF in demand analysis]
+anticipateANF e n once_dmd_ty = case getIdFromTrivialExpr_maybe e of
+  Nothing -> dmd_ty_mul
+  Just v  -> adjustFvDemand (\(n :* sd) -> multCard n_many n :* sd) v dmd_ty_mul
+  where
+    (!n_once, !n_many) = splitManyCard n
+      -- Ex.: splitManyCard C_0N == (C_01, C_1N), and C_0N == C_01*C_1N
+    dmd_ty_mul         = multDmdType n_once once_dmd_ty
 
 -- Main Demand Analsysis machinery
 dmdAnal, dmdAnal' :: AnalEnv
@@ -398,7 +404,7 @@ dmdAnal' env dmd (App fun arg)
         call_dmd          = mkCalledOnceDmd dmd
         WithDmdType fun_ty fun' = dmdAnal env call_dmd fun
         (arg_dmd, res_ty) = splitDmdTy fun_ty
-        (arg_ty, arg')    = dmdAnalStar env (dmdTransformThunkDmd arg arg_dmd) arg
+        (arg_ty, arg')    = dmdAnalStar env arg_dmd arg
     in
 --    pprTrace "dmdAnal:app" (vcat
 --         [ text "dmd =" <+> ppr dmd
@@ -563,7 +569,7 @@ dmdAnalSumAlt :: AnalEnv -> SubDemand -> Id -> Alt Var -> WithDmdType (Alt Var)
 dmdAnalSumAlt env dmd case_bndr (Alt con bndrs rhs)
   | WithDmdType rhs_ty rhs' <- dmdAnal env dmd rhs
   , WithDmdType alt_ty dmds <- findBndrsDmds env rhs_ty bndrs
-  , let (_ :* case_bndr_sd) = findIdDemand alt_ty case_bndr
+  , let (_ :* case_bndr_sd) = lookupFvDemand alt_ty case_bndr
         -- See Note [Demand on case-alternative binders]
         -- we can't use the scrut_sd, because it says 'Prod' and we'll use
         -- topSubDmd anyway for scrutinees of sum types.
@@ -589,6 +595,57 @@ addCaseBndrDmd case_sd fld_dmds
     scrut_sd = case_sd `plusSubDmd` mkProd Unboxed fld_dmds
 
 {-
+Note [Anticipating ANF in demand analysis]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+When analysing let RHSs and function arguments, we have to pretend that the
+let or application expression is really in administrative normal form (ANF).
+The key is that both `let y = g x in f y` and `f (g x)` look the same in ANF.
+(The actual transformation is done in CorePrep.) Hence, we have a function
+'dmdAnalStar' that handles let RHSs and function arguments alike.
+
+When a RHS or function argument is "complex enough" (e.g., not trivial), we
+will get a thunk whose RHS is memoised, e.g., we get the `let y = g x in f y`
+form is STG. (In STG, an updatable let RHS is the single way to memoise).
+Regardless how many times 'f' its arg, 'g' is only called once.
+
+By contrast, when a RHS or function argument is trivial, e.g.,
+`let y = x |> co in f y`, we get `f (x |> co)` (see Note [Inlining in CorePrep])
+and no memoisation whatsoever. Now consider
+```
+f x = let y = x |> co in fst y `seq` y `seq` ()
+```
+Here, 'x' only occurs in the trivial RHS of 'y'. What is the demand on 'x'?
+1P(1L,A) or SP(1L,A)? It's the latter, because 'y' will be inlined, because 'x'
+is a thunk and thus cheap to evaluate. If demand analysis would say that 'x' is
+used once, it would become a single-entry thunk and a call to 'f' would evaluate
+it twice. Bad!
+The same applies to trivial arguments, e.g., 'f z' really evaluates 'z' twice.
+
+Given a demand `n:*sd` put on an expression 'e' and
+`(dmd_ty, e') = dmdAnal e sd`. Then this is what 'dmdAnalStar' has to do,
+depending on 'n' and 'e':
+
+* 'n' is absent (C_10, C_00): See Note [Analysing with absent demand].
+  Suffice it to say, we multiply 'dmd_ty' with 'n' (via 'multDmdType', which
+  will return an empty env) and return e' (which is the main point about
+  analysing with absent demand).
+* 'e' is non-trivial, and `n=[l,u]`. Then memoise by pretending that the upper
+  bound 'u' is 1, so `n_once=[l,1]`. Multiply 'dmd_ty' with 'n_once' to get
+  'dmd_ty_mul' before returning it along with e'.
+* `e = x |> co` is trivial, and `n=[l,u]`. Do everything as in the non-trivial
+  case (because 'x' might be a function with a demand signature to unleash), but
+  then bump up the upper bound of 'x's evaluation cardinality in 'dmd_ty_mul' to
+  'u'. We do so by multiplying with the cardinality `n_many=[1,u]` (observe that
+  `n_once*n_many=n`), with 'multCard'.
+  Why not 'multDmd' on the *demand* on 'x'? Consider again the example above,
+  where 'dmd_ty_mul' from 'y's RHS is `[x:->1P(1L,A)]` and 'n_many' is S=C_1N.
+  With `multCard C_1N`, we will bump to `[x:->SP(1L,A)]`.
+  With `multDmd C_1N`,  we will bump to `[x:->SP(SL,A)]`, which is worse than
+  the previous result and would mean that analysing through trivial bindings
+  loses information.
+
+The decomposition `n=:n_once*n_many` is done by 'splitManyCard'.
+
 Note [Analysing with absent demand]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Suppose we analyse an expression with demand A.  The "A" means
@@ -1852,7 +1909,7 @@ annotateLamIdBndr env dmd_ty id
     WithDmdType main_ty new_id
   where
     new_id  = setIdDemandInfo id dmd
-    main_ty = addDemand dmd dmd_ty'
+    main_ty = addArgDemand dmd dmd_ty'
     WithDmdType dmd_ty' dmd = findBndrDmd env dmd_ty id
 
 {- Note [NOINLINE and strictness]
@@ -2012,7 +2069,7 @@ findBndrDmd env dmd_ty id
     dmd' = strictify $
            trimToType starting_dmd (findTypeShape fam_envs id_ty)
 
-    (dmd_ty', starting_dmd) = peelFV dmd_ty id
+    (dmd_ty', starting_dmd) = peelFvDemand dmd_ty id
 
     id_ty = idType id
 

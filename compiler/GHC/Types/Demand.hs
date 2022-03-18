@@ -36,8 +36,8 @@ module GHC.Types.Demand (
     evalDmd,
     -- *** Demands used in PrimOp signatures
     lazyApply1Dmd, lazyApply2Dmd, strictOnceApply1Dmd, strictManyApply1Dmd,
-    -- ** Other @Demand@ operations
-    oneifyCard, oneifyDmd, strictifyDmd, strictifyDictDmd, lazifyDmd,
+    -- ** Other @Card@ and @Demand@ operations
+    splitManyCard, strictifyDmd, strictifyDictDmd, lazifyDmd,
     peelCallDmd, peelManyCalls, mkCalledOnceDmd, mkCalledOnceDmds,
     mkWorkerDemand,
     -- ** Extracting one-shot information
@@ -60,7 +60,7 @@ module GHC.Types.Demand (
     -- *** PlusDmdArg
     PlusDmdArg, mkPlusDmdArg, toPlusDmdArg,
     -- ** Other operations
-    peelFV, findIdDemand, addDemand, splitDmdTy, deferAfterPreciseException,
+    lookupFvDemand, adjustFvDemand, peelFvDemand, addArgDemand, splitDmdTy, deferAfterPreciseException,
     keepAliveDmdType,
 
     -- * Demand signatures
@@ -562,16 +562,35 @@ isCardNonAbs = not . isAbs
 isCardNonOnce :: Card -> Bool
 isCardNonOnce n = isAbs n || not (isUsedOnce n)
 
--- | Intersect with [0,1].
-oneifyCard :: Card -> Card
-oneifyCard C_0N = C_01
-oneifyCard C_1N = C_11
-oneifyCard c    = c
+-- | Splits a 'Card' into two pieces:
+--
+--   1. The first is the same 'Card' but with its upper bound at most 1.
+--   2. The second piece is either 'C_11' or 'C_1N' (the "many-card"), such that
+--      the result of multiplying both pieces together with 'multCard' yields
+--      the original 'Card'.
+--
+-- Examples:
+-- >>> splitManyCard C_0N
+-- (C_01, C_1N)
+-- >>> splitManyCard C_1N
+-- (C_11, C_1N)
+-- >>> splitManyCard C_01
+-- (C_01, C_11)
+-- >>> splitManyCard C_10
+-- (C_10, C_11)
+splitManyCard :: Card -> (Card, Card)
+splitManyCard n = (glbCard C_01 n, lubCard C_11 (glbCard C_1N n))
+{-# INLINE splitManyCard #-}
 
 -- | Denotes '∪' on 'Card'.
 lubCard :: Card -> Card -> Card
 -- See Note [Bit vector representation for Card]
 lubCard (Card a) (Card b) = Card (a .|. b) -- main point of the bit-vector encoding!
+
+-- | Denotes '∩' on 'Card'.
+glbCard :: Card -> Card -> Card
+-- See Note [Bit vector representation for Card]
+glbCard (Card a) (Card b) = Card (a .&. b)
 
 -- | Denotes '+' on lower and upper bounds of 'Card'.
 plusCard :: Card -> Card -> Card
@@ -954,12 +973,6 @@ lazyApply1Dmd = C_01 :* mkCall C_01 topSubDmd
 -- Calls its arg lazily, but then applies it exactly once to an additional argument.
 lazyApply2Dmd :: Demand
 lazyApply2Dmd = C_01 :* mkCall C_01 (mkCall C_11 topSubDmd)
-
--- | Make a 'Demand' evaluated at-most-once.
-oneifyDmd :: Demand -> Demand
-oneifyDmd AbsDmd    = AbsDmd
-oneifyDmd BotDmd    = BotDmd
-oneifyDmd (n :* sd) = oneifyCard n :* sd
 
 -- | Make a 'Demand' evaluated at-least-once (e.g. strict).
 strictifyDmd :: Demand -> Demand
@@ -1654,21 +1667,26 @@ multDmdType n (DmdType fv args res_ty)
             (map (multDmd n) args)
             (multDivergence n res_ty)
 
-peelFV :: DmdType -> Var -> (DmdType, Demand)
-peelFV (DmdType fv ds res) id = -- pprTrace "rfv" (ppr id <+> ppr dmd $$ ppr fv)
-                               (DmdType fv' ds res, dmd)
+lookupFvDemand :: DmdType -> Var -> Demand
+lookupFvDemand (DmdType fv _ res) id
+  = lookupVarEnv fv id `orElse` defaultFvDmd res
+
+peelFvDemand :: DmdType -> Var -> (DmdType, Demand)
+peelFvDemand (DmdType fv ds res) id = -- pprTrace "rfv" (ppr id <+> ppr dmd $$ ppr fv)
+                                      (DmdType fv' ds res, dmd)
   where
   -- Force these arguments so that old `Env` is not retained.
   !fv' = fv `delVarEnv` id
   -- See Note [Default demand on free variables and arguments]
   !dmd  = lookupVarEnv fv id `orElse` defaultFvDmd res
 
-addDemand :: Demand -> DmdType -> DmdType
-addDemand dmd (DmdType fv ds res) = DmdType fv (dmd:ds) res
+-- | `adjustFvDemand f id ty` adjusts the free variable demand `dmd` on `id` in
+-- `ty` (if it is was mentioned at all) to `f dmd`.
+adjustFvDemand :: (Demand -> Demand) -> Id -> DmdType -> DmdType
+adjustFvDemand f id ty@DmdType{dt_env=env} = ty{dt_env=adjustUFM f env id}
 
-findIdDemand :: DmdType -> Var -> Demand
-findIdDemand (DmdType fv _ res) id
-  = lookupVarEnv fv id `orElse` defaultFvDmd res
+addArgDemand :: Demand -> DmdType -> DmdType
+addArgDemand dmd (DmdType fv ds res) = DmdType fv (dmd:ds) res
 
 -- | When e is evaluated after executing an IO action that may throw a precise
 -- exception, we act as if there is an additional control flow path that is
