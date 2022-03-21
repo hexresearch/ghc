@@ -646,6 +646,7 @@ are the most common patterns, rewritten as regular expressions for clarity:
  '='            { L _ ITequal }
  '\\'           { L _ ITlam }
  'lcase'        { L _ ITlcase }
+ 'lcases'       { L _ ITlcases }
  '|'            { L _ ITvbar }
  '<-'           { L _ (ITlarrow _) }
  '->'           { L _ (ITrarrow _) }
@@ -3248,6 +3249,14 @@ alt     :: { forall b. DisambECP b => PV (LMatch GhcPs (LocatedA b)) }
                                                   , m_pats = [$1]
                                                   , m_grhss = unLoc $2 }))}
 
+nalt    :: { forall b. DisambECP b => PV (LMatch GhcPs (LocatedA b)) }
+           : apats alt_rhs { $2 >>= \ $2 ->
+                             acsA (\cs -> sLLAsl $1 $>
+                                            (Match { m_ext = EpAnn (listAsAnchor $1) [] cs
+                                                   , m_ctxt = CaseAlt
+                                                   , m_pats = $1
+                                                   , m_grhss = unLoc $2 }))}
+
 alt_rhs :: { forall b. DisambECP b => PV (Located (GRHSs GhcPs (LocatedA b))) }
         : ralt wherebinds           { $1 >>= \alt ->
                                       do { let {L l (bs, csw) = adaptWhereBinds $2}
@@ -4049,6 +4058,11 @@ sLLlA x y = sL (comb2A x y) -- #define LL   sL (comb2 $1 $>)
 {-# INLINE sLLAl #-}
 sLLAl :: LocatedAn t a -> Located b -> c -> Located c
 sLLAl x y = sL (comb2A y x) -- #define LL   sL (comb2 $1 $>)
+
+{-# INLINE sLLAsl #-}
+sLLAsl :: [LocatedAn t a] -> Located b -> c -> Located c
+sLLAsl [] = sL1
+sLLAsl (x:_) = sLLAl x
 
 {-# INLINE sLLAA #-}
 sLLAA :: LocatedAn t a -> LocatedAn u b -> c -> Located c
