@@ -1,6 +1,6 @@
 
 ==================== Tidy Core ====================
-Result size of Tidy Core = {terms: 24, types: 20, coercions: 5, joins: 0/0}
+Result size of Tidy Core = {terms: 29, types: 22, coercions: 5, joins: 0/0}
 
 -- RHS size: {terms: 1, types: 0, coercions: 0, joins: 0/0}
 T18231.$trModule4 :: GHC.Prim.Addr#
@@ -23,14 +23,14 @@ T18231.$trModule :: GHC.Types.Module
 T18231.$trModule = GHC.Types.Module T18231.$trModule3 T18231.$trModule1
 
 Rec {
--- RHS size: {terms: 1, types: 0, coercions: 0, joins: 0/0}
-lvl :: Data.Functor.Identity.Identity ((), Int)
-lvl = lvl
+-- RHS size: {terms: 5, types: 1, coercions: 0, joins: 0/0}
+T18231.m2 :: GHC.Prim.Int# -> Data.Functor.Identity.Identity ((), Int)
+T18231.m2 = \ (x :: GHC.Prim.Int#) -> T18231.m2 (GHC.Prim.+# x 1#)
 end Rec }
 
--- RHS size: {terms: 5, types: 3, coercions: 0, joins: 0/0}
+-- RHS size: {terms: 6, types: 3, coercions: 0, joins: 0/0}
 T18231.m1 :: Int -> Data.Functor.Identity.Identity ((), Int)
-T18231.m1 = \ (eta2 :: Int) -> case eta2 of { GHC.Types.I# x -> lvl }
+T18231.m1 = \ (eta2 :: Int) -> case eta2 of { GHC.Types.I# ww -> T18231.m2 ww }
 
 -- RHS size: {terms: 1, types: 0, coercions: 5, joins: 0/0}
 m :: State Int ()
