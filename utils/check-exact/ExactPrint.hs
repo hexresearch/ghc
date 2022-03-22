@@ -1823,7 +1823,7 @@ instance ExactPrint (HsExpr GhcPs) where
   getAnnotationEntry (HsOverLit an _)             = fromAnn an
   getAnnotationEntry (HsLit an _)                 = fromAnn an
   getAnnotationEntry (HsLam _ _)                  = NoEntryVal
-  getAnnotationEntry (HsLamCase an _)             = fromAnn an
+  getAnnotationEntry (HsLamCase an _ _)           = fromAnn an
   getAnnotationEntry (HsApp an _ _)               = fromAnn an
   getAnnotationEntry (HsAppType _ _ _)            = NoEntryVal
   getAnnotationEntry (OpApp an _ _ _)             = fromAnn an
@@ -1888,7 +1888,8 @@ instance ExactPrint (HsExpr GhcPs) where
       -- markExpr _ (HsLam _ _) = error $ "HsLam with other than one match"
   exact (HsLam _ _) = error $ "HsLam with other than one match"
 
-  exact (HsLamCase an mg) = do
+  -- XXX JB do \cases
+  exact (HsLamCase an _ mg) = do
     markEpAnn an AnnLam
     markEpAnn an AnnCase
     markAnnotated mg
@@ -2308,7 +2309,7 @@ instance ExactPrint (HsCmd GhcPs) where
   getAnnotationEntry (HsCmdLam {})              = NoEntryVal
   getAnnotationEntry (HsCmdPar an _ _ _)        = fromAnn an
   getAnnotationEntry (HsCmdCase an _ _)         = fromAnn an
-  getAnnotationEntry (HsCmdLamCase an _)        = fromAnn an
+  getAnnotationEntry (HsCmdLamCase an _ _)      = fromAnn an
   getAnnotationEntry (HsCmdIf an _ _ _ _)       = fromAnn an
   getAnnotationEntry (HsCmdLet an _ _ _ _)      = fromAnn an
   getAnnotationEntry (HsCmdDo an _)             = fromAnn an
@@ -2359,7 +2360,8 @@ instance ExactPrint (HsCmd GhcPs) where
     markAnnotated alts
     markEpAnn' an hsCaseAnnsRest AnnCloseC
 
-  exact (HsCmdLamCase an matches) = do
+  -- XXX JB do \cases
+  exact (HsCmdLamCase an _ matches) = do
     markEpAnn an AnnLam
     markEpAnn an AnnCase
     markAnnotated matches

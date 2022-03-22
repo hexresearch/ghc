@@ -175,7 +175,9 @@ instance Diagnostic PsMessage where
                      , text "Character literals may not be empty"
                      ]
     PsErrLambdaCase
-      -> mkSimpleDecorated $ text "Illegal lambda-case"
+      -- we can't get this error for \cases, since without -XLambdaCase, that's
+      -- just a regular lambda expression
+      -> mkSimpleDecorated $ text ("Illegal " ++ lam_case_keyword False)
     PsErrEmptyLambda
        -> mkSimpleDecorated $ text "A lambda requires at least one parameter"
     PsErrLinearFunction
@@ -312,8 +314,8 @@ instance Diagnostic PsMessage where
       -> mkSimpleDecorated $ text "do-notation in pattern"
     PsErrIfThenElseInPat
       -> mkSimpleDecorated $ text "(if ... then ... else ...)-syntax in pattern"
-    PsErrLambdaCaseInPat
-      -> mkSimpleDecorated $ text "(\\case ...)-syntax in pattern"
+    (PsErrLambdaCaseInPat isCases)
+      -> mkSimpleDecorated $ text (lam_case_keyword isCases ++ " ...)-syntax in pattern")
     PsErrCaseInPat
       -> mkSimpleDecorated $ text "(case ... of ...)-syntax in pattern"
     PsErrLetInPat
@@ -341,6 +343,9 @@ instance Diagnostic PsMessage where
       -> mkSimpleDecorated $ pp_unexpected_fun_app (text "lambda command") a
     PsErrCaseCmdInFunAppCmd a
       -> mkSimpleDecorated $ pp_unexpected_fun_app (text "case command") a
+    PsErrLambdaCaseCmdInFunAppCmd isCases a
+      -> mkSimpleDecorated $
+           pp_unexpected_fun_app (text $ lam_case_keyword isCases ++ " command") a
     PsErrIfCmdInFunAppCmd a
       -> mkSimpleDecorated $ pp_unexpected_fun_app (text "if command") a
     PsErrLetCmdInFunAppCmd a
@@ -355,8 +360,8 @@ instance Diagnostic PsMessage where
       -> mkSimpleDecorated $ pp_unexpected_fun_app (text "lambda expression") a
     PsErrCaseInFunAppExpr a
       -> mkSimpleDecorated $ pp_unexpected_fun_app (text "case expression") a
-    PsErrLambdaCaseInFunAppExpr a
-      -> mkSimpleDecorated $ pp_unexpected_fun_app (text "lambda-case expression") a
+    PsErrLambdaCaseInFunAppExpr isCases a
+      -> mkSimpleDecorated $ pp_unexpected_fun_app (text $ lam_case_keyword isCases ++ " expression") a
     PsErrLetInFunAppExpr a
       -> mkSimpleDecorated $ pp_unexpected_fun_app (text "let expression") a
     PsErrIfInFunAppExpr a
@@ -556,7 +561,7 @@ instance Diagnostic PsMessage where
     PsErrIllegalUnboxedFloatingLitInPat{}         -> ErrorWithoutFlag
     PsErrDoNotationInPat{}                        -> ErrorWithoutFlag
     PsErrIfThenElseInPat                          -> ErrorWithoutFlag
-    PsErrLambdaCaseInPat                          -> ErrorWithoutFlag
+    PsErrLambdaCaseInPat{}                        -> ErrorWithoutFlag
     PsErrCaseInPat                                -> ErrorWithoutFlag
     PsErrLetInPat                                 -> ErrorWithoutFlag
     PsErrLambdaInPat                              -> ErrorWithoutFlag
@@ -566,6 +571,7 @@ instance Diagnostic PsMessage where
     PsErrViewPatInExpr{}                          -> ErrorWithoutFlag
     PsErrLambdaCmdInFunAppCmd{}                   -> ErrorWithoutFlag
     PsErrCaseCmdInFunAppCmd{}                     -> ErrorWithoutFlag
+    PsErrLambdaCaseCmdInFunAppCmd{}               -> ErrorWithoutFlag
     PsErrIfCmdInFunAppCmd{}                       -> ErrorWithoutFlag
     PsErrLetCmdInFunAppCmd{}                      -> ErrorWithoutFlag
     PsErrDoCmdInFunAppCmd{}                       -> ErrorWithoutFlag
@@ -685,7 +691,7 @@ instance Diagnostic PsMessage where
     PsErrIllegalUnboxedFloatingLitInPat{}         -> noHints
     PsErrDoNotationInPat{}                        -> noHints
     PsErrIfThenElseInPat                          -> noHints
-    PsErrLambdaCaseInPat                          -> noHints
+    PsErrLambdaCaseInPat{}                        -> noHints
     PsErrCaseInPat                                -> noHints
     PsErrLetInPat                                 -> noHints
     PsErrLambdaInPat                              -> noHints
@@ -695,6 +701,7 @@ instance Diagnostic PsMessage where
     PsErrViewPatInExpr{}                          -> noHints
     PsErrLambdaCmdInFunAppCmd{}                   -> suggestParensAndBlockArgs
     PsErrCaseCmdInFunAppCmd{}                     -> suggestParensAndBlockArgs
+    PsErrLambdaCaseCmdInFunAppCmd{}               -> suggestParensAndBlockArgs
     PsErrIfCmdInFunAppCmd{}                       -> suggestParensAndBlockArgs
     PsErrLetCmdInFunAppCmd{}                      -> suggestParensAndBlockArgs
     PsErrDoCmdInFunAppCmd{}                       -> suggestParensAndBlockArgs
@@ -828,3 +835,6 @@ parse_error_in_pat = text "Parse error in pattern:"
 forallSym :: Bool -> SDoc
 forallSym True  = text "∀"
 forallSym False = text "forall"
+
+lam_case_keyword :: Bool -> String
+lam_case_keyword isCases = "\\case" ++ ['s' | isCases]

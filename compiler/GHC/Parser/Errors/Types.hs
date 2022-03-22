@@ -245,7 +245,8 @@ data PsMessage
    | PsErrIfThenElseInPat
 
    -- | Lambda-case in pattern
-   | PsErrLambdaCaseInPat
+   -- XXX JB I'm using Bools so much, consider introducing a type for that (but I guess we couldn't use that type in the TH Exp?)
+   | PsErrLambdaCaseInPat Bool -- ^ `True` for `\cases`, `False` for `\case`
 
    -- | case..of in pattern
    | PsErrCaseInPat
@@ -311,6 +312,11 @@ data PsMessage
    -- | Unexpected case command in function application
    | PsErrCaseCmdInFunAppCmd !(LHsCmd GhcPs)
 
+   -- | Unexpected \case(s) command in function application
+   | PsErrLambdaCaseCmdInFunAppCmd
+       !Bool -- ^ `True` for `\cases`, `False` for `\case`
+       !(LHsCmd GhcPs)
+
    -- | Unexpected if command in function application
    | PsErrIfCmdInFunAppCmd !(LHsCmd GhcPs)
 
@@ -332,8 +338,10 @@ data PsMessage
    -- | Unexpected case expression in function application
    | PsErrCaseInFunAppExpr !(LHsExpr GhcPs)
 
-   -- | Unexpected lambda-case expression in function application
-   | PsErrLambdaCaseInFunAppExpr !(LHsExpr GhcPs)
+   -- | Unexpected \case(s) expression in function application
+   | PsErrLambdaCaseInFunAppExpr
+       !Bool -- ^ `True` for `\cases`, `False` for `\case`
+       !(LHsExpr GhcPs)
 
    -- | Unexpected let expression in function application
    | PsErrLetInFunAppExpr !(LHsExpr GhcPs)

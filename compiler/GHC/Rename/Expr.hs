@@ -374,9 +374,10 @@ rnExpr (HsLam x matches)
   = do { (matches', fvMatch) <- rnMatchGroup LambdaExpr rnLExpr matches
        ; return (HsLam x matches', fvMatch) }
 
-rnExpr (HsLamCase x matches)
+-- XXX JB do \cases
+rnExpr (HsLamCase x isCases matches)
   = do { (matches', fvs_ms) <- rnMatchGroup CaseAlt rnLExpr matches
-       ; return (HsLamCase x matches', fvs_ms) }
+       ; return (HsLamCase x isCases matches', fvs_ms) }
 
 rnExpr (HsCase _ expr matches)
   = do { (new_expr, e_fvs) <- rnLExpr expr
@@ -808,9 +809,10 @@ rnCmd (HsCmdCase _ expr matches)
        ; return (HsCmdCase noExtField new_expr new_matches
                 , e_fvs `plusFV` ms_fvs) }
 
-rnCmd (HsCmdLamCase x matches)
+-- XXX JB do \cases
+rnCmd (HsCmdLamCase x isCases matches)
   = do { (new_matches, ms_fvs) <- rnMatchGroup (ArrowMatchCtxt ArrowCaseAlt) rnLCmd matches
-       ; return (HsCmdLamCase x new_matches, ms_fvs) }
+       ; return (HsCmdLamCase x isCases new_matches, ms_fvs) }
 
 rnCmd (HsCmdIf _ _ p b1 b2)
   = do { (p', fvP) <- rnLExpr p
@@ -862,7 +864,7 @@ methodNamesCmd (HsCmdLam _ match)        = methodNamesMatch match
 
 methodNamesCmd (HsCmdCase _ _ matches)
   = methodNamesMatch matches `addOneFV` choiceAName
-methodNamesCmd (HsCmdLamCase _ matches)
+methodNamesCmd (HsCmdLamCase _ _ matches)
   = methodNamesMatch matches `addOneFV` choiceAName
 
 --methodNamesCmd _ = emptyFVs
@@ -873,6 +875,7 @@ methodNamesCmd (HsCmdLamCase _ matches)
 ---------------------------------------------------
 methodNamesMatch :: MatchGroup GhcRn (LHsCmd GhcRn) -> FreeVars
 methodNamesMatch (MG { mg_alts = L _ ms })
+-- XXX JB does this look for methods used in view patterns as well? Does it need to? iow, do view patterns work with proc + \case?
   = plusFVs (map do_one ms)
  where
     do_one (L _ (Match { m_grhss = grhss })) = methodNamesGRHSs grhss

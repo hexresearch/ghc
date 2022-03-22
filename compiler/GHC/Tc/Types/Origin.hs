@@ -684,7 +684,7 @@ exprCtOrigin (HsIPVar _ ip)       = IPOccOrigin ip
 exprCtOrigin (HsOverLit _ lit)    = LiteralOrigin lit
 exprCtOrigin (HsLit {})           = Shouldn'tHappenOrigin "concrete literal"
 exprCtOrigin (HsLam _ matches)    = matchesCtOrigin matches
-exprCtOrigin (HsLamCase _ ms)     = matchesCtOrigin ms
+exprCtOrigin (HsLamCase _ _ ms)   = matchesCtOrigin ms
 exprCtOrigin (HsApp _ e1 _)       = lexprCtOrigin e1
 exprCtOrigin (HsAppType _ e1 _)   = lexprCtOrigin e1
 exprCtOrigin (OpApp _ _ op _)     = lexprCtOrigin op
@@ -1173,10 +1173,15 @@ data FRRArrowOrigin
   -- statement does not have a fixed runtime representation.
   --
   -- Test cases: none.
-  | ArrowCmdCase { isCmdLamCase :: Bool
-                    -- ^ Whether this is a lambda-case (True)
-                    -- or a normal case (False)
-                 }
+  | ArrowCmdCase
+
+  -- | The scrutinee type in an arrow command lambda-case statement does not
+  -- have a fixed runtime representation.
+  --
+  -- Test cases: none.
+  | ArrowCmdLamCase { isCmdLamCases :: Bool -- ^ True for \cases, False for \case
+                    -- XXX JB Actually we need !(Maybe Int) here or something (maybe make it stricter somehow), see ArrowCmdLam
+                    }
 
   -- | The overall type of an arrow proc expression does not have
   -- a fixed runtime representation.
@@ -1199,13 +1204,9 @@ pprFRRArrowOrigin (ArrowCmdArrApp fun arg ho_app)
          , nest 2 (quotes (ppr arg)) ]
 pprFRRArrowOrigin (ArrowCmdLam i)
   = vcat [ text "The" <+> speakNth i <+> text "pattern of the arrow command abstraction" ]
-pprFRRArrowOrigin (ArrowCmdCase { isCmdLamCase = is_lam_case })
-  = text "The scrutinee of the arrow" <+> what <+> text "command"
-  where
-    what :: SDoc
-    what = if is_lam_case
-           then text "lambda-case"
-           else text "case"
+pprFRRArrowOrigin ArrowCmdCase
+  = text "The scrutinee of the arrow case command"
+pprFRRArrowOrigin (ArrowCmdLamCase {}) = error "XXX JB"
 pprFRRArrowOrigin (ArrowFun fun)
   = vcat [ text "The return type of the arrow function"
          , nest 2 (quotes (ppr fun)) ]
@@ -1246,7 +1247,7 @@ data ExpectedFunTyOrigin
             -- ^ argument
   | ExpectedFunTyMatches  !TypedThing !(MatchGroup GhcRn (LHsExpr GhcRn))
   | ExpectedFunTyLam      !(MatchGroup GhcRn (LHsExpr GhcRn))
-  | ExpectedFunTyLamCase  !(HsExpr GhcRn)
+  | ExpectedFunTyLamCase  !(HsExpr GhcRn) -- XXX JB do \cases
 
 pprExpectedFunTyOrigin :: ExpectedFunTyOrigin
                        -> Int -- ^ argument position (starting at 1)
@@ -1272,13 +1273,14 @@ pprExpectedFunTyOrigin funTy_origin i =
       | otherwise
       -> text "The" <+> speakNth i <+> text "pattern in the equation" <> plural alts
      <+> text "for" <+> quotes (ppr fun)
-    ExpectedFunTyLam {} ->
-      text "The binder of the lambda expression"
-    ExpectedFunTyLamCase {} ->
-      text "The binder of the lambda-case expression"
+    ExpectedFunTyLam {} -> binder_of "lambda"
+    ExpectedFunTyLamCase {} -> binder_of "lambda-case" -- XXX JB do \cases
   where
     the_arg_of :: SDoc
     the_arg_of = text "The" <+> speakNth i <+> text "argument of"
+
+    binder_of :: String -> SDoc
+    binder_of what = text "The binder of the " <+> text what <+> text "expression"
 
 pprExpectedFunTyHerald :: ExpectedFunTyOrigin -> SDoc
 pprExpectedFunTyHerald (ExpectedFunTySyntaxOp {})
@@ -1296,6 +1298,6 @@ pprExpectedFunTyHerald (ExpectedFunTyLam match)
                            pprMatches match)
         -- The pprSetDepth makes the lambda abstraction print briefly
         , text "has" ]
-pprExpectedFunTyHerald (ExpectedFunTyLamCase expr)
+pprExpectedFunTyHerald (ExpectedFunTyLamCase expr) -- XXX JB do \cases?
   = sep [ text "The function" <+> quotes (ppr expr)
         , text "requires" ]

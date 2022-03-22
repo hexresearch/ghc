@@ -2804,7 +2804,10 @@ aexp    :: { ECP }
                                            mkHsLetPV (comb2A $1 $>) (hsTok $1) (unLoc $2) (hsTok $3) $4 }
         | '\\' 'lcase' altslist
             {  ECP $ $3 >>= \ $3 ->
-                 mkHsLamCasePV (comb2 $1 (reLoc $>)) $3 [mj AnnLam $1,mj AnnCase $2] }
+                 mkHsLamCasePV (comb2 $1 (reLoc $>)) False $3 [mj AnnLam $1,mj AnnCase $2] }
+        | '\\' 'lcases' naltslist
+            {  ECP $ $3 >>= \ $3 ->
+                 mkHsLamCasePV (comb2 $1 (reLoc $>)) True $3 [mj AnnLam $1,mj AnnCase $2] }
         | 'if' exp optSemi 'then' exp optSemi 'else' exp
                          {% runPV (unECP $2) >>= \ ($2 :: LHsExpr GhcPs) ->
                             return $ ECP $
@@ -3216,10 +3219,27 @@ altslist :: { forall b. DisambECP b => PV (LocatedL [LMatch GhcPs (LocatedA b)])
         | '{'                 '}'    { amsrl (sLL $1 $> []) (AnnList Nothing (Just $ moc $1) (Just $ mcc $2) [] []) }
         |     vocurly          close { return $ noLocA [] }
 
+naltslist :: { forall b. DisambECP b => PV (LocatedL [LMatch GhcPs (LocatedA b)]) }
+        : '{'           nalts '}'  { $2 >>= \ $2 -> amsrl
+                                     (sLL $1 $> (reverse (snd $ unLoc $2)))
+                                               (AnnList (Just $ glR $2) (Just $ moc $1) (Just $ mcc $3) (fst $ unLoc $2) []) }
+        |     vocurly   nalts  close { $2 >>= \ $2 -> amsrl
+                                       (L (getLoc $2) (reverse (snd $ unLoc $2)))
+                                        (AnnList (Just $ glR $2) Nothing Nothing (fst $ unLoc $2) []) }
+        | '{'                 '}'    { amsrl (sLL $1 $> []) (AnnList Nothing (Just $ moc $1) (Just $ mcc $2) [] []) }
+        |     vocurly          close { return $ noLocA [] }
+
 alts    :: { forall b. DisambECP b => PV (Located ([AddEpAnn],[LMatch GhcPs (LocatedA b)])) }
         : alts1                    { $1 >>= \ $1 -> return $
                                      sL1 $1 (fst $ unLoc $1,snd $ unLoc $1) }
         | ';' alts                 { $2 >>= \ $2 -> return $
+                                     sLL $1 $> (((mz AnnSemi $1) ++ (fst $ unLoc $2) )
+                                               ,snd $ unLoc $2) }
+
+nalts   :: { forall b. DisambECP b => PV (Located ([AddEpAnn],[LMatch GhcPs (LocatedA b)])) }
+        : nalts1                   { $1 >>= \ $1 -> return $
+                                     sL1 $1 (fst $ unLoc $1,snd $ unLoc $1) }
+        | ';' nalts                { $2 >>= \ $2 -> return $
                                      sLL $1 $> (((mz AnnSemi $1) ++ (fst $ unLoc $2) )
                                                ,snd $ unLoc $2) }
 
@@ -3240,6 +3260,24 @@ alts1   :: { forall b. DisambECP b => PV (Located ([AddEpAnn],[LMatch GhcPs (Loc
                                          h' <- addTrailingSemiA h (gl $2)
                                          return (sLL $1 $> (fst $ unLoc $1, h' : t)) }
         | alt                   { $1 >>= \ $1 -> return $ sL1 (reLoc $1) ([],[$1]) }
+
+nalts1  :: { forall b. DisambECP b => PV (Located ([AddEpAnn],[LMatch GhcPs (LocatedA b)])) }
+        : nalts1 ';' nalt       { $1 >>= \ $1 ->
+                                  $3 >>= \ $3 ->
+                                     case snd $ unLoc $1 of
+                                       [] -> return (sLL $1 (reLoc $>) ((fst $ unLoc $1) ++ (mz AnnSemi $2)
+                                                                       ,[$3]))
+                                       (h:t) -> do
+                                         h' <- addTrailingSemiA h (gl $2)
+                                         return (sLL $1 (reLoc $>) (fst $ unLoc $1,$3 : h' : t)) }
+        | nalts1 ';'            {  $1 >>= \ $1 ->
+                                     case snd $ unLoc $1 of
+                                       [] -> return (sLL $1 $> ((fst $ unLoc $1) ++ (mz AnnSemi $2)
+                                                                       ,[]))
+                                       (h:t) -> do
+                                         h' <- addTrailingSemiA h (gl $2)
+                                         return (sLL $1 $> (fst $ unLoc $1, h' : t)) }
+        | nalt                  { $1 >>= \ $1 -> return $ sL1 (reLoc $1) ([],[$1]) }
 
 alt     :: { forall b. DisambECP b => PV (LMatch GhcPs (LocatedA b)) }
            : pat alt_rhs  { $2 >>= \ $2 ->

@@ -154,8 +154,10 @@ pprExp _ (InfixE me1 op me2) = parens $ pprMaybeExp noPrec me1
 pprExp i (LamE [] e) = pprExp i e -- #13856
 pprExp i (LamE ps e) = parensIf (i > noPrec) $ char '\\' <> hsep (map (pprPat appPrec) ps)
                                            <+> text "->" <+> ppr e
-pprExp i (LamCaseE ms) = parensIf (i > noPrec)
-                       $ text "\\case" $$ braces (semiSep ms)
+-- XXX JB is semiSep correct for \cases?
+pprExp i (LamCaseE isCases ms) = parensIf (i > noPrec)
+                               $ text keyword $$ braces (semiSep ms)
+  where keyword = "\\case" ++ ['s' | isCases]
 pprExp i (TupE es)
   | [Just e] <- es
   = pprExp i (ConE (tupleDataName 1) `AppE` e)

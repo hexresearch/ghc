@@ -164,19 +164,20 @@ tc_cmd env in_cmd@(HsCmdCase x scrut matches) (stk, res_ty)
   = addErrCtxt (cmdCtxt in_cmd) $ do
       (scrut', scrut_ty) <- tcInferRho scrut
       hasFixedRuntimeRep_MustBeRefl
-        (FRRArrow $ ArrowCmdCase { isCmdLamCase = False })
+        (FRRArrow $ ArrowCmdCase)
         scrut_ty
       matches' <- tcCmdMatches env scrut_ty matches (stk, res_ty)
       return (HsCmdCase x scrut' matches')
 
-tc_cmd env in_cmd@(HsCmdLamCase x matches) (stk, res_ty)
+tc_cmd env in_cmd@(HsCmdLamCase x isCases matches) (stk, res_ty)
   = addErrCtxt (cmdCtxt in_cmd) $ do
+      -- XXX JB do we have to change this 1? (or do anything else here for \cases)
       (co, [scrut_ty], stk') <- matchExpectedCmdArgs 1 stk
       hasFixedRuntimeRep_MustBeRefl
-        (FRRArrow $ ArrowCmdCase { isCmdLamCase = True })
+        (FRRArrow $ ArrowCmdLamCase{isCmdLamCases = isCases})
         scrut_ty
       matches' <- tcCmdMatches env scrut_ty matches (stk', res_ty)
-      return (mkHsCmdWrap (mkWpCastN co) (HsCmdLamCase x matches'))
+      return (mkHsCmdWrap (mkWpCastN co) (HsCmdLamCase x isCases matches'))
 
 tc_cmd env (HsCmdIf x NoSyntaxExprRn pred b1 b2) res_ty    -- Ordinary 'if'
   = do  { pred' <- tcCheckMonoExpr pred boolTy
@@ -370,6 +371,7 @@ tc_cmd _ cmd _
 
 -- | Typechecking for case command alternatives. Used for both
 -- 'HsCmdCase' and 'HsCmdLamCase'.
+-- XXX JB do \cases
 tcCmdMatches :: CmdEnv
              -> TcType -- ^ Type of the scrutinee.
                        -- Must have a fixed RuntimeRep as per

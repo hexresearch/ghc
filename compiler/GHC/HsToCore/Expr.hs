@@ -302,9 +302,10 @@ dsExpr (NegApp _ expr neg_expr)
 dsExpr (HsLam _ a_Match)
   = uncurry mkLams <$> matchWrapper LambdaExpr Nothing a_Match
 
-dsExpr (HsLamCase _ matches)
+-- XXX JB do \cases
+dsExpr (HsLamCase _ _ matches)
   = do { ([discrim_var], matching_code) <- matchWrapper CaseAlt Nothing matches
-       ; return $ Lam discrim_var matching_code }
+; return $ Lam discrim_var matching_code }
 
 dsExpr e@(HsApp _ fun arg)
   = do { fun' <- dsLExpr fun

@@ -1,4 +1,3 @@
-
 {-# LANGUAGE TypeFamilies #-}
 
 {-# OPTIONS_GHC -Wno-incomplete-record-updates #-}
@@ -555,10 +554,30 @@ dsCmd ids local_vars stack_ty res_ty
     return (do_premap ids in_ty sum_ty res_ty core_matches core_choices,
             exprFreeIdsDSet core_body `uniqDSetIntersectUniqSet` local_vars)
 
+
+{-
+\cases and \case are desugared analogously to a case command (see above).
+For example
+
+        \cases {p1 q1 -> c1; p2 q2 -> c2; p3 q3 -> c3 }
+
+is translated to
+
+-- XXX JB I don't think this is quite right - the types of ((c1 ||| c2) ||| c3)
+-- probably won't match up because premap contains a function rather than value
+
+        premap (\ ((xs)*ts) -> \cases
+                  p1 q1 -> (Left (Left (xs1)*ts))
+                  p2 q2 -> Left ((Right (xs2)*ts))
+                  p3 q3 -> Right ((xs3)*ts))
+        ((c1 ||| c2) ||| c3)
+
+-}
+        -- XXX JB factor out the branch creation stuff from case and use it here, too
 dsCmd ids local_vars stack_ty res_ty
-      (HsCmdLamCase _ mg@MG { mg_ext = MatchGroupTc [Scaled arg_mult arg_ty] _ }) env_ids = do
+      (HsCmdLamCase _ _ mg@MG { mg_ext = MatchGroupTc [Scaled arg_mult arg_ty] _ }) env_ids = do
   arg_id <- newSysLocalDs arg_mult arg_ty
-  let case_cmd  = noLocA $ HsCmdCase noExtField (nlHsVar arg_id) mg
+  let case_cmd  = noLocA $ HsCmdCase noExtField (nlHsVar arg_id) mg
   dsCmdLam ids local_vars stack_ty res_ty [nlVarPat arg_id] case_cmd env_ids
 
 -- D; ys |-a cmd : stk --> t
@@ -680,7 +699,7 @@ trimInput build_arrow
         (core_cmd, free_vars) <- build_arrow env_ids
         return (core_cmd, free_vars, dVarSetElems free_vars))
 
--- Desugaring for both HsCmdLam and HsCmdLamCase.
+-- Desugaring for both HsCmdLam and HsCmdLamCase(s).
 --
 -- D; ys |-a cmd : stk t'
 -- -----------------------------------------------

@@ -360,13 +360,15 @@ data HsExpr p
 
        -- For details on above see Note [exact print annotations] in GHC.Parser.Annotation
 
-  | HsLamCase (XLamCase p) (MatchGroup p (LHsExpr p)) -- ^ Lambda-case
-       --
-       -- - 'GHC.Parser.Annotation.AnnKeywordId' : 'GHC.Parser.Annotation.AnnLam',
-       --           'GHC.Parser.Annotation.AnnCase','GHC.Parser.Annotation.AnnOpen',
-       --           'GHC.Parser.Annotation.AnnClose'
+  -- | Lambda-case
+  --
+  -- - 'GHC.Parser.Annotation.AnnKeywordId' : 'GHC.Parser.Annotation.AnnLam',
+  --           'GHC.Parser.Annotation.AnnCase','GHC.Parser.Annotation.AnnOpen',
+  --           'GHC.Parser.Annotation.AnnClose'
 
-       -- For details on above see Note [exact print annotations] in GHC.Parser.Annotation
+  -- For details on above see Note [exact print annotations] in GHC.Parser.Annotation
+  | HsLamCase (XLamCase p) !Bool -- ^ 'True' for `\cases`, `False` for `\case`
+              (MatchGroup p (LHsExpr p))
 
   | HsApp     (XApp p) (LHsExpr p) (LHsExpr p) -- ^ Application
 
@@ -913,13 +915,15 @@ data HsCmd id
 
     -- For details on above see Note [exact print annotations] in GHC.Parser.Annotation
 
-  | HsCmdLamCase (XCmdLamCase id)
-                 (MatchGroup id (LHsCmd id))    -- bodies are HsCmd's
-    -- ^ - 'GHC.Parser.Annotation.AnnKeywordId' : 'GHC.Parser.Annotation.AnnLam',
-    --       'GHC.Parser.Annotation.AnnCase','GHC.Parser.Annotation.AnnOpen' @'{'@,
-    --       'GHC.Parser.Annotation.AnnClose' @'}'@
+  -- | Lambda-case
+  --
+  -- - 'GHC.Parser.Annotation.AnnKeywordId' : 'GHC.Parser.Annotation.AnnLam',
+  --     'GHC.Parser.Annotation.AnnCase','GHC.Parser.Annotation.AnnOpen' @'{'@,
+  --     'GHC.Parser.Annotation.AnnClose' @'}'@
 
-    -- For details on above see Note [exact print annotations] in GHC.Parser.Annotation
+  -- For details on above see Note [exact print annotations] in GHC.Parser.Annotation
+  | HsCmdLamCase (XCmdLamCase id) !Bool -- ^ `True` for `\cases`, `False` for `\case`
+                 (MatchGroup id (LHsCmd id))    -- bodies are HsCmd's
 
   | HsCmdIf     (XCmdIf id)
                 (SyntaxExpr id)         -- cond function

@@ -956,11 +956,11 @@ cvtl e = wrapLA (cvt e)
                             ; return $ HsLam noExtField (mkMatchGroup th_origin
                                              (noLocA [mkSimpleMatch LambdaExpr
                                              pats e']))}
-    cvt (LamCaseE ms)  = do { ms' <- mapM (cvtMatch CaseAlt) ms
-                            ; th_origin <- getOrigin
-                            ; return $ HsLamCase noAnn
-                                                   (mkMatchGroup th_origin (noLocA ms'))
-                            }
+    cvt (LamCaseE isCases ms) = do { ms' <- mapM (cvtMatch CaseAlt) ms
+                                   ; th_origin <- getOrigin
+                                   ; return $ HsLamCase noAnn isCases
+                                       (mkMatchGroup th_origin (noLocA ms'))
+                                   }
     cvt (TupE es)        = cvt_tup es Boxed
     cvt (UnboxedTupE es) = cvt_tup es Unboxed
     cvt (UnboxedSumE e alt arity) = do { e' <- cvtl e

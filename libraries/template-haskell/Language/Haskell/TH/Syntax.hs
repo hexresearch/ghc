@@ -2216,7 +2216,8 @@ data Exp
                                        --
                                        -- See "Language.Haskell.TH.Syntax#infix"
   | LamE [Pat] Exp                     -- ^ @{ \\ p1 p2 -> e }@
-  | LamCaseE [Match]                   -- ^ @{ \\case m1; m2 }@
+  | LamCaseE Bool [Match]              -- ^ @{ \\case m1; m2 }@, or @{ \\cases m1; m2 }@
+                                       -- if the 'Bool' is `True`
   | TupE [Maybe Exp]                   -- ^ @{ (e1,e2) }  @
                                        --
                                        -- The 'Maybe' is necessary for handling

@@ -322,6 +322,7 @@ type instance XLitE          (GhcPass _) = EpAnnCO
 type instance XLam           (GhcPass _) = NoExtField
 
 type instance XLamCase       (GhcPass _) = EpAnn [AddEpAnn]
+
 type instance XApp           (GhcPass _) = EpAnnCO
 
 type instance XAppTypeE      GhcPs = SrcSpan -- Where the `@` lives
@@ -643,9 +644,10 @@ ppr_expr (ExplicitSum _ alt arity expr)
 ppr_expr (HsLam _ matches)
   = pprMatches matches
 
-ppr_expr (HsLamCase _ matches)
-  = sep [ sep [text "\\case"],
+ppr_expr (HsLamCase _ isCases matches)
+  = sep [ sep [text keyword],
           nest 2 (pprMatches matches) ]
+  where keyword = "\\case" ++ ['s' | isCases]
 
 ppr_expr (HsCase _ expr matches@(MG { mg_alts = L _ alts }))
   = sep [ sep [text "case", nest 4 (ppr expr), text "of"],
@@ -1229,8 +1231,9 @@ ppr_cmd (HsCmdCase _ expr matches)
   = sep [ sep [text "case", nest 4 (ppr expr), text "of"],
           nest 2 (pprMatches matches) ]
 
-ppr_cmd (HsCmdLamCase _ matches)
-  = sep [ text "\\case", nest 2 (pprMatches matches) ]
+ppr_cmd (HsCmdLamCase _ isCases matches)
+  = sep [ text keyword, nest 2 (pprMatches matches) ]
+  where keyword = "\\case" ++ ['s' | isCases]
 
 ppr_cmd (HsCmdIf _ _ e ct ce)
   = sep [hsep [text "if", nest 2 (ppr e), text "then"],
@@ -1407,6 +1410,8 @@ pprMatch (Match { m_pats = pats, m_ctxt = ctxt, m_grhss = grhss })
             LambdaExpr -> (char '\\', pats)
 
             _ -> case pats of
+                      -- XXX JB will this cause problems when we try to pretty print cases?
+                      -- XXX JB   first of all, we always want parens, and second, have length > 1
                    []    -> (empty, [])
                    [pat] -> (ppr pat, [])  -- No parens around the single pat in a case
                    _     -> pprPanic "pprMatch" (ppr ctxt $$ ppr pats)
