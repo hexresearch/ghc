@@ -367,8 +367,7 @@ data HsExpr p
   --           'GHC.Parser.Annotation.AnnClose'
 
   -- For details on above see Note [exact print annotations] in GHC.Parser.Annotation
-  | HsLamCase (XLamCase p) !Bool -- ^ 'True' for `\cases`, `False` for `\case`
-              (MatchGroup p (LHsExpr p))
+  | HsLamCase (XLamCase p) LamCaseKind (MatchGroup p (LHsExpr p))
 
   | HsApp     (XApp p) (LHsExpr p) (LHsExpr p) -- ^ Application
 
@@ -681,6 +680,12 @@ data HsTupArg id
   | XTupArg !(XXTupArg id)   -- ^ Extension point; see Note [Trees That Grow]
                              -- in Language.Haskell.Syntax.Extension
 
+-- | Which kind of lambda case are we dealing with?
+data LamCaseKind
+  = LamCase -- ^ `\case`
+  | LamCases -- ^ `\cases`
+  deriving (Data, Eq)
+
 {-
 Note [Parens in HsSyn]
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -922,8 +927,8 @@ data HsCmd id
   --     'GHC.Parser.Annotation.AnnClose' @'}'@
 
   -- For details on above see Note [exact print annotations] in GHC.Parser.Annotation
-  | HsCmdLamCase (XCmdLamCase id) !Bool -- ^ `True` for `\cases`, `False` for `\case`
-                 (MatchGroup id (LHsCmd id))    -- bodies are HsCmd's
+  | HsCmdLamCase (XCmdLamCase id) LamCaseKind
+                 (MatchGroup id (LHsCmd id)) -- bodies are HsCmd's
 
   | HsCmdIf     (XCmdIf id)
                 (SyntaxExpr id)         -- cond function

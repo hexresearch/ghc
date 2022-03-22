@@ -41,6 +41,7 @@ instance Binary TH.DerivStrategy
 instance Binary TH.Guard
 instance Binary TH.Body
 instance Binary TH.Match
+instance Binary TH.Matches
 instance Binary TH.Fixity
 instance Binary TH.TySynEqn
 instance Binary TH.FunDep

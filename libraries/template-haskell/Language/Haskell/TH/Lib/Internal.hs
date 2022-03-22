@@ -300,10 +300,13 @@ lamE ps e = do ps' <- sequenceA ps
 lam1E :: Quote m => m Pat -> m Exp -> m Exp
 lam1E p e = lamE [p] e
 
--- | Lambda-case(s)
-lamCaseE :: Quote m => Bool -- ^ `True` for `\cases`, `False` for `\case`
-         -> [m Match] -> m Exp
-lamCaseE isCases ms = LamCaseE isCases <$> sequenceA ms
+-- | Lambda-case (@\case@)
+lamCaseE :: Quote m => [m Match] -> m Exp
+lamCaseE ms = LamCaseE <$> sequenceA ms
+
+-- | Lambda-cases (@\cases@)
+lamCasesE :: Quote m => [m Matches] -> m Exp
+lamCasesE ms = LamCasesE <$> sequenceA ms
 
 tupE :: Quote m => [Maybe (m Exp)] -> m Exp
 tupE es = do { es1 <- traverse sequenceA es; pure (TupE es1)}

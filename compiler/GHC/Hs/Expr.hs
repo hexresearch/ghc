@@ -644,10 +644,9 @@ ppr_expr (ExplicitSum _ alt arity expr)
 ppr_expr (HsLam _ matches)
   = pprMatches matches
 
-ppr_expr (HsLamCase _ isCases matches)
-  = sep [ sep [text keyword],
+ppr_expr (HsLamCase _ lcKind matches)
+  = sep [ sep [text $ lam_cases_keyword lcKind],
           nest 2 (pprMatches matches) ]
-  where keyword = "\\case" ++ ['s' | isCases]
 
 ppr_expr (HsCase _ expr matches@(MG { mg_alts = L _ alts }))
   = sep [ sep [text "case", nest 4 (ppr expr), text "of"],
@@ -768,6 +767,9 @@ instance Outputable XXExprGhcTc where
             ppr tickIdFalse,
             text ">(",
             ppr exp, text ")"]
+
+lam_cases_keyword :: LamCaseKind -> String
+lam_cases_keyword lcKind = "\\case" ++ ['s' | lcKind == LamCases]
 
 ppr_infix_expr :: forall p. (OutputableBndrId p) => HsExpr (GhcPass p) -> Maybe SDoc
 ppr_infix_expr (HsVar _ (L _ v))    = Just (pprInfixOcc v)
@@ -1231,9 +1233,8 @@ ppr_cmd (HsCmdCase _ expr matches)
   = sep [ sep [text "case", nest 4 (ppr expr), text "of"],
           nest 2 (pprMatches matches) ]
 
-ppr_cmd (HsCmdLamCase _ isCases matches)
-  = sep [ text keyword, nest 2 (pprMatches matches) ]
-  where keyword = "\\case" ++ ['s' | isCases]
+ppr_cmd (HsCmdLamCase _ lcKind matches)
+  = sep [ text $ lam_cases_keyword lcKind, nest 2 (pprMatches matches) ]
 
 ppr_cmd (HsCmdIf _ _ e ct ce)
   = sep [hsep [text "if", nest 2 (ppr e), text "then"],

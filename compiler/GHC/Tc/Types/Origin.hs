@@ -60,6 +60,7 @@ import GHC.Types.Basic
 import GHC.Types.SrcLoc
 
 import GHC.Data.FastString
+import qualified GHC.Data.Strict as Strict
 
 import GHC.Utils.Outputable
 import GHC.Utils.Panic
@@ -1169,19 +1170,18 @@ data FRRArrowOrigin
   -- Test cases: none.
   | ArrowCmdLam !Int
 
-  -- | The scrutinee type in an arrow command case or lambda-case
-  -- statement does not have a fixed runtime representation.
+  -- | The scrutinee type in an arrow command case statement does not have a
+  -- fixed runtime representation.
   --
   -- Test cases: none.
   | ArrowCmdCase
 
-  -- | The scrutinee type in an arrow command lambda-case statement does not
+  -- | A pattern in an arrow command \cases statement does not
   -- have a fixed runtime representation.
   --
   -- Test cases: none.
-  | ArrowCmdLamCase { isCmdLamCases :: Bool -- ^ True for \cases, False for \case
-                    -- XXX JB Actually we need !(Maybe Int) here or something (maybe make it stricter somehow), see ArrowCmdLam
-                    }
+  | ArrowCmdLamCase !(Strict.Maybe Int)
+      -- ^ @Nothing@ for @\case@, @Just@ the index of the pattern for @\cases@
 
   -- | The overall type of an arrow proc expression does not have
   -- a fixed runtime representation.
