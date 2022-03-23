@@ -53,6 +53,7 @@ type CxtQ                = Q Cxt
 type PredQ               = Q Pred
 type DerivClauseQ        = Q DerivClause
 type MatchQ              = Q Match
+type MatchesQ            = Q Matches
 type ClauseQ             = Q Clause
 type BodyQ               = Q Body
 type GuardQ              = Q Guard
@@ -237,6 +238,13 @@ match p rhs ds = do { p' <- p;
                       r' <- rhs;
                       ds' <- sequenceA ds;
                       pure (Match p' r' ds') }
+
+-- | Use with 'lamCasesE"
+matches :: Quote m => m [Pat] -> m Body -> [m Dec] -> m Matches
+matches ps rhs ds = do { ps' <- ps;
+                         r' <- rhs;
+                         ds' <- sequenceA ds;
+                         pure (Matches ps' r' ds') }
 
 -- | Use with 'funD'
 clause :: Quote m => [m Pat] -> m Body -> [m Dec] -> m Clause

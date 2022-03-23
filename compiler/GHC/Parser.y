@@ -3291,7 +3291,7 @@ nalt    :: { forall b. DisambECP b => PV (LMatch GhcPs (LocatedA b)) }
            : apats alt_rhs { $2 >>= \ $2 ->
                              acsA (\cs -> sLLAsl $1 $>
                                             (Match { m_ext = EpAnn (listAsAnchor $1) [] cs
-                                                   , m_ctxt = CaseAlt
+                                                   , m_ctxt = LamCasesAlt
                                                    , m_pats = $1
                                                    , m_grhss = unLoc $2 }))}
 

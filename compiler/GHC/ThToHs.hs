@@ -56,7 +56,6 @@ import GHC.Utils.Panic
 
 import qualified Data.ByteString as BS
 import Control.Monad( unless, ap )
-
 import Data.Maybe( catMaybes, isNothing )
 import Language.Haskell.TH as TH hiding (sigP)
 import Language.Haskell.TH.Syntax as TH
@@ -959,19 +958,16 @@ cvtl e = wrapLA (cvt e)
     cvt (LamCaseE ms) = do { ms' <- mapM (cvtMatch CaseAlt) ms
                            ; th_origin <- getOrigin
                            ; return $ HsLamCase noAnn LamCase
-                               (mkMatchGroup th_origin (noLocA ms'))
-                           }
-    cvt (LamCasesE _) = do { ms' <- mapM (cvtMatch CaseAlt) (error "XXX JB")
+                               (mkMatchGroup th_origin (noLocA ms')) }
+    cvt (LamCasesE ms) = do { ms' <- mapM (cvtMatches LamCasesAlt) ms
                             ; th_origin <- getOrigin
                             ; return $ HsLamCase noAnn LamCases
-                                (mkMatchGroup th_origin (noLocA ms'))
-                            }
+                                (mkMatchGroup th_origin (noLocA ms')) }
     cvt (TupE es)        = cvt_tup es Boxed
     cvt (UnboxedTupE es) = cvt_tup es Unboxed
     cvt (UnboxedSumE e alt arity) = do { e' <- cvtl e
                                        ; unboxedSumChecks alt arity
-                                       ; return $ ExplicitSum noAnn
-                                                                   alt arity e'}
+                                       ; return $ ExplicitSum noAnn alt arity e'}
     cvt (CondE x y z)  = do { x' <- cvtl x; y' <- cvtl y; z' <- cvtl z;
                             ; return $ mkHsIf x' y' z' noAnn }
     cvt (MultiIfE alts)
@@ -1217,14 +1213,18 @@ cvtStmt (TH.RecS ss) = do { ss' <- mapM cvtStmt ss; returnLA (mkRecStmt noAnn (n
 
 cvtMatch :: HsMatchContext GhcPs
          -> TH.Match -> CvtM (Hs.LMatch GhcPs (LHsExpr GhcPs))
-cvtMatch ctxt (TH.Match p body decs)
-  = do  { p' <- cvtPat p
-        ; let lp = case p' of
-                     (L loc SigPat{}) -> L loc (gParPat p') -- #14875
-                     _                -> p'
+cvtMatch ctxt (TH.Match p body decs) = cvtMatches ctxt (TH.Matches [p] body decs)
+
+cvtMatches :: HsMatchContext GhcPs
+           -> TH.Matches -> CvtM (Hs.LMatch GhcPs (LHsExpr GhcPs))
+cvtMatches ctxt (TH.Matches ps body decs)
+  = do  { lps <- traverse (fmap par_sig . cvtPat) ps
         ; g' <- cvtGuard body
         ; decs' <- cvtLocalDecs (text "a where clause") decs
-        ; returnLA $ Hs.Match noAnn ctxt [lp] (GRHSs emptyComments g' decs') }
+        ; returnLA $ Hs.Match noAnn ctxt lps (GRHSs emptyComments g' decs') }
+  where par_sig p = case p of
+          L loc SigPat{} -> L loc (gParPat p) -- #14875
+          _              -> p
 
 cvtGuard :: TH.Body -> CvtM [LGRHS GhcPs (LHsExpr GhcPs)]
 cvtGuard (GuardedB pairs) = mapM cvtpair pairs

@@ -171,7 +171,7 @@ tc_cmd env in_cmd@(HsCmdCase x scrut matches) (stk, res_ty)
       matches' <- tcCmdMatches env scrut_ty matches (stk, res_ty)
       return (HsCmdCase x scrut' matches')
 
-tc_cmd env in_cmd@(HsCmdLamCase x lcKind matches) (stk, res_ty)
+tc_cmd env in_cmd@(HsCmdLamCase x lcVariant matches) (stk, res_ty)
   = addErrCtxt (cmdCtxt in_cmd) $ do
       -- XXX JB do we have to change this 1? (or do anything else here for \cases) -> look at ArrowCmdLam
       (co, [scrut_ty], stk') <- matchExpectedCmdArgs 1 stk
@@ -179,7 +179,7 @@ tc_cmd env in_cmd@(HsCmdLamCase x lcKind matches) (stk, res_ty)
         (FRRArrow $ ArrowCmdLamCase Strict.Nothing) -- XXX JB Nothing here is definitely wrong
         scrut_ty
       matches' <- tcCmdMatches env scrut_ty matches (stk', res_ty)
-      return (mkHsCmdWrap (mkWpCastN co) (HsCmdLamCase x lcKind matches'))
+      return (mkHsCmdWrap (mkWpCastN co) (HsCmdLamCase x lcVariant matches'))
 
 tc_cmd env (HsCmdIf x NoSyntaxExprRn pred b1 b2) res_ty    -- Ordinary 'if'
   = do  { pred' <- tcCheckMonoExpr pred boolTy

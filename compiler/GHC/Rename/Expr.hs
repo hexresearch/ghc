@@ -375,9 +375,9 @@ rnExpr (HsLam x matches)
        ; return (HsLam x matches', fvMatch) }
 
 -- XXX JB do \cases
-rnExpr (HsLamCase x lcKind matches)
+rnExpr (HsLamCase x lcVariant matches)
   = do { (matches', fvs_ms) <- rnMatchGroup CaseAlt rnLExpr matches
-       ; return (HsLamCase x lcKind matches', fvs_ms) }
+       ; return (HsLamCase x lcVariant matches', fvs_ms) }
 
 rnExpr (HsCase _ expr matches)
   = do { (new_expr, e_fvs) <- rnLExpr expr
@@ -810,9 +810,9 @@ rnCmd (HsCmdCase _ expr matches)
                 , e_fvs `plusFV` ms_fvs) }
 
 -- XXX JB do \cases
-rnCmd (HsCmdLamCase x lcKind matches)
+rnCmd (HsCmdLamCase x lcVariant matches)
   = do { (new_matches, ms_fvs) <- rnMatchGroup (ArrowMatchCtxt ArrowCaseAlt) rnLCmd matches
-       ; return (HsCmdLamCase x lcKind new_matches, ms_fvs) }
+       ; return (HsCmdLamCase x lcVariant new_matches, ms_fvs) }
 
 rnCmd (HsCmdIf _ _ p b1 b2)
   = do { (p', fvP) <- rnLExpr p

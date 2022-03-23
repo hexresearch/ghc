@@ -83,7 +83,7 @@ module Language.Haskell.TH(
         Fixity(..), FixityDirection(..), defaultFixity, maxPrecedence,
         PatSynDir(..), PatSynArgs(..),
     -- ** Expressions
-        Exp(..), Match(..), Body(..), Guard(..), Stmt(..), Range(..), Lit(..),
+        Exp(..), Match(..), Matches(..), Body(..), Guard(..), Stmt(..), Range(..), Lit(..),
     -- ** Patterns
         Pat(..), FieldExp, FieldPat,
     -- ** Types

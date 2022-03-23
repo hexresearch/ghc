@@ -1228,8 +1228,13 @@ emptyCaseErr ctxt = TcRnUnknownMessage $ mkPlainError noHints $
   where
     pp_ctxt :: HsMatchContext GhcRn -> SDoc
     pp_ctxt c = case c of
-      CaseAlt       -> text "case expression"
-      LambdaExpr    -> text "\\case expression"
+      -- Note that CaseAlt is also used for \case expressions
+      -- XXX JB maybe we could circumvent that by adding a field to ParseContext telling us whether we are in \case?
+      -- XXX JB maybe that would even allow us to collapse nalt and alt into one by adding a field of type (Maybe (LamCaseVariant))
+      -- XXX JB However I'm not sure about that because I don't know if you can use that to control whether pat or apats is parsed...
+      -- XXX JB the answer is yes! with parameterized productions. Well, technically the answer is no, but that feature is good enough
+      CaseAlt                     -> text "case expression"
+      LamCasesAlt                 -> text "\\cases expression"
       ArrowMatchCtxt ArrowCaseAlt -> text "case expression"
       ArrowMatchCtxt KappaExpr    -> text "kappa abstraction"
       _             -> text "(unexpected)" <+> pprMatchContextNoun c

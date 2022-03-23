@@ -24,7 +24,7 @@ import GHC.Utils.Outputable
 import GHC.Utils.Misc
 import GHC.Data.FastString
 import GHC.Data.Maybe (catMaybes)
-import GHC.Hs.Expr (prependQualified, HsExpr(..), LamCaseKind(..))
+import GHC.Hs.Expr (prependQualified, HsExpr(..), LamCaseVariant(..))
 import GHC.Hs.Type (pprLHsContext)
 import GHC.Builtin.Names (allNameStrings)
 import GHC.Builtin.Types (filterCTuple)
@@ -314,8 +314,8 @@ instance Diagnostic PsMessage where
       -> mkSimpleDecorated $ text "do-notation in pattern"
     PsErrIfThenElseInPat
       -> mkSimpleDecorated $ text "(if ... then ... else ...)-syntax in pattern"
-    (PsErrLambdaCaseInPat lcKind)
-      -> mkSimpleDecorated $ text (lam_case_keyword lcKind ++ " ...)-syntax in pattern")
+    (PsErrLambdaCaseInPat lcVariant)
+      -> mkSimpleDecorated $ text (lam_case_keyword lcVariant ++ " ...)-syntax in pattern")
     PsErrCaseInPat
       -> mkSimpleDecorated $ text "(case ... of ...)-syntax in pattern"
     PsErrLetInPat
@@ -343,9 +343,9 @@ instance Diagnostic PsMessage where
       -> mkSimpleDecorated $ pp_unexpected_fun_app (text "lambda command") a
     PsErrCaseCmdInFunAppCmd a
       -> mkSimpleDecorated $ pp_unexpected_fun_app (text "case command") a
-    PsErrLambdaCaseCmdInFunAppCmd lcKind a
+    PsErrLambdaCaseCmdInFunAppCmd lcVariant a
       -> mkSimpleDecorated $
-           pp_unexpected_fun_app (text $ lam_case_keyword lcKind ++ " command") a
+           pp_unexpected_fun_app (text $ lam_case_keyword lcVariant ++ " command") a
     PsErrIfCmdInFunAppCmd a
       -> mkSimpleDecorated $ pp_unexpected_fun_app (text "if command") a
     PsErrLetCmdInFunAppCmd a
@@ -360,8 +360,8 @@ instance Diagnostic PsMessage where
       -> mkSimpleDecorated $ pp_unexpected_fun_app (text "lambda expression") a
     PsErrCaseInFunAppExpr a
       -> mkSimpleDecorated $ pp_unexpected_fun_app (text "case expression") a
-    PsErrLambdaCaseInFunAppExpr lcKind a
-      -> mkSimpleDecorated $ pp_unexpected_fun_app (text $ lam_case_keyword lcKind ++ " expression") a
+    PsErrLambdaCaseInFunAppExpr lcVariant a
+      -> mkSimpleDecorated $ pp_unexpected_fun_app (text $ lam_case_keyword lcVariant ++ " expression") a
     PsErrLetInFunAppExpr a
       -> mkSimpleDecorated $ pp_unexpected_fun_app (text "let expression") a
     PsErrIfInFunAppExpr a
@@ -836,5 +836,5 @@ forallSym :: Bool -> SDoc
 forallSym True  = text "∀"
 forallSym False = text "forall"
 
-lam_case_keyword :: LamCaseKind -> String
-lam_case_keyword lcKind = "\\case" ++ ['s' | lcKind == LamCases]
+lam_case_keyword :: LamCaseVariant -> String
+lam_case_keyword lcVariant = "\\case" ++ ['s' | lcVariant == LamCases]

@@ -84,6 +84,7 @@ redundantBang dflags = wopt Opt_WarnRedundantBangPatterns dflags
 exhaustiveWarningFlag :: HsMatchContext id -> Maybe WarningFlag
 exhaustiveWarningFlag (FunRhs {})   = Just Opt_WarnIncompletePatterns
 exhaustiveWarningFlag CaseAlt       = Just Opt_WarnIncompletePatterns
+exhaustiveWarningFlag LamCasesAlt   = Just Opt_WarnIncompletePatterns
 exhaustiveWarningFlag IfAlt         = Just Opt_WarnIncompletePatterns
 exhaustiveWarningFlag LambdaExpr    = Just Opt_WarnIncompleteUniPatterns
 exhaustiveWarningFlag PatBindRhs    = Just Opt_WarnIncompleteUniPatterns

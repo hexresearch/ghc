@@ -367,7 +367,7 @@ data HsExpr p
   --           'GHC.Parser.Annotation.AnnClose'
 
   -- For details on above see Note [exact print annotations] in GHC.Parser.Annotation
-  | HsLamCase (XLamCase p) LamCaseKind (MatchGroup p (LHsExpr p))
+  | HsLamCase (XLamCase p) LamCaseVariant (MatchGroup p (LHsExpr p))
 
   | HsApp     (XApp p) (LHsExpr p) (LHsExpr p) -- ^ Application
 
@@ -681,7 +681,7 @@ data HsTupArg id
                              -- in Language.Haskell.Syntax.Extension
 
 -- | Which kind of lambda case are we dealing with?
-data LamCaseKind
+data LamCaseVariant
   = LamCase -- ^ `\case`
   | LamCases -- ^ `\cases`
   deriving (Data, Eq)
@@ -927,7 +927,7 @@ data HsCmd id
   --     'GHC.Parser.Annotation.AnnClose' @'}'@
 
   -- For details on above see Note [exact print annotations] in GHC.Parser.Annotation
-  | HsCmdLamCase (XCmdLamCase id) LamCaseKind
+  | HsCmdLamCase (XCmdLamCase id) LamCaseVariant
                  (MatchGroup id (LHsCmd id)) -- bodies are HsCmd's
 
   | HsCmdIf     (XCmdIf id)
@@ -1662,7 +1662,8 @@ data HsMatchContext p
                                 -- ^A pattern matching on an argument of a
                                 -- function binding
   | LambdaExpr                  -- ^Patterns of a lambda
-  | CaseAlt                     -- ^Patterns and guards on a case alternative
+  | CaseAlt                     -- ^Patterns and guards in a case alternative or @\case@
+  | LamCasesAlt                 -- ^Patterns and guards in @\cases@
   | IfAlt                       -- ^Guards of a multi-way if alternative
   | ArrowMatchCtxt              -- ^A pattern match inside arrow notation
       HsArrowMatchContext
@@ -1760,15 +1761,16 @@ isMonadDoCompContext (DoExpr _)   = False
 isMonadDoCompContext (MDoExpr _)  = False
 
 matchSeparator :: HsMatchContext p -> SDoc
-matchSeparator (FunRhs {})   = text "="
-matchSeparator CaseAlt       = text "->"
-matchSeparator IfAlt         = text "->"
-matchSeparator LambdaExpr    = text "->"
-matchSeparator (ArrowMatchCtxt{})= text "->"
-matchSeparator PatBindRhs    = text "="
-matchSeparator PatBindGuards = text "="
-matchSeparator (StmtCtxt _)  = text "<-"
-matchSeparator RecUpd        = text "=" -- This can be printed by the pattern
+matchSeparator FunRhs{}         = text "="
+matchSeparator CaseAlt          = text "->"
+matchSeparator LamCasesAlt      = text "->"
+matchSeparator IfAlt            = text "->"
+matchSeparator LambdaExpr       = text "->"
+matchSeparator ArrowMatchCtxt{} = text "->"
+matchSeparator PatBindRhs       = text "="
+matchSeparator PatBindGuards    = text "="
+matchSeparator StmtCtxt{}       = text "<-"
+matchSeparator RecUpd           = text "=" -- This can be printed by the pattern
                                        -- match checker trace
 matchSeparator ThPatSplice  = panic "unused"
 matchSeparator ThPatQuote   = panic "unused"
@@ -1790,7 +1792,10 @@ pprMatchContextNoun :: forall p. (Outputable (IdP p), UnXRec p)
 pprMatchContextNoun (FunRhs {mc_fun=fun})
                                     = text "equation for"
                                       <+> quotes (ppr (unXRec @p fun))
+-- Note that CaseAlt is also used for \case
+-- XXX JB is this still the plan?
 pprMatchContextNoun CaseAlt         = text "case alternative"
+pprMatchContextNoun LamCasesAlt     = text "\\cases alternative"
 pprMatchContextNoun IfAlt           = text "multi-way if alternative"
 pprMatchContextNoun RecUpd          = text "record-update construct"
 pprMatchContextNoun ThPatSplice     = text "Template Haskell pattern splice"

@@ -644,8 +644,8 @@ ppr_expr (ExplicitSum _ alt arity expr)
 ppr_expr (HsLam _ matches)
   = pprMatches matches
 
-ppr_expr (HsLamCase _ lcKind matches)
-  = sep [ sep [text $ lam_cases_keyword lcKind],
+ppr_expr (HsLamCase _ lcVariant matches)
+  = sep [ sep [text $ lam_cases_keyword lcVariant],
           nest 2 (pprMatches matches) ]
 
 ppr_expr (HsCase _ expr matches@(MG { mg_alts = L _ alts }))
@@ -768,8 +768,8 @@ instance Outputable XXExprGhcTc where
             text ">(",
             ppr exp, text ")"]
 
-lam_cases_keyword :: LamCaseKind -> String
-lam_cases_keyword lcKind = "\\case" ++ ['s' | lcKind == LamCases]
+lam_cases_keyword :: LamCaseVariant -> String
+lam_cases_keyword lcVariant = "\\case" ++ ['s' | lcVariant == LamCases]
 
 ppr_infix_expr :: forall p. (OutputableBndrId p) => HsExpr (GhcPass p) -> Maybe SDoc
 ppr_infix_expr (HsVar _ (L _ v))    = Just (pprInfixOcc v)
@@ -1233,8 +1233,8 @@ ppr_cmd (HsCmdCase _ expr matches)
   = sep [ sep [text "case", nest 4 (ppr expr), text "of"],
           nest 2 (pprMatches matches) ]
 
-ppr_cmd (HsCmdLamCase _ lcKind matches)
-  = sep [ text $ lam_cases_keyword lcKind, nest 2 (pprMatches matches) ]
+ppr_cmd (HsCmdLamCase _ lcVariant matches)
+  = sep [ text $ lam_cases_keyword lcVariant, nest 2 (pprMatches matches) ]
 
 ppr_cmd (HsCmdIf _ _ e ct ce)
   = sep [hsep [text "if", nest 2 (ppr e), text "then"],
@@ -1934,6 +1934,7 @@ instance OutputableBndrId p => Outputable (HsMatchContext (GhcPass p)) where
   ppr m@(FunRhs{})          = text "FunRhs" <+> ppr (mc_fun m) <+> ppr (mc_fixity m)
   ppr LambdaExpr            = text "LambdaExpr"
   ppr CaseAlt               = text "CaseAlt"
+  ppr LamCasesAlt           = text "LamCasesAlt"
   ppr IfAlt                 = text "IfAlt"
   ppr (ArrowMatchCtxt c)    = text "ArrowMatchCtxt" <+> ppr c
   ppr PatBindRhs            = text "PatBindRhs"
@@ -1960,6 +1961,7 @@ matchContextErrString :: OutputableBndrId p
                       => HsMatchContext (GhcPass p) -> SDoc
 matchContextErrString (FunRhs{mc_fun=L _ fun})   = text "function" <+> ppr fun
 matchContextErrString CaseAlt                    = text "case"
+matchContextErrString LamCasesAlt                = text "\\cases"
 matchContextErrString IfAlt                      = text "multi-way if"
 matchContextErrString PatBindRhs                 = text "pattern binding"
 matchContextErrString PatBindGuards              = text "pattern binding guards"

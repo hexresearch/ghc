@@ -19,8 +19,8 @@ module Language.Haskell.TH.Lib (
     -- * Library functions
     -- ** Abbreviations
         InfoQ, ExpQ, TExpQ, CodeQ, DecQ, DecsQ, ConQ, TypeQ, KindQ,
-        TyLitQ, CxtQ, PredQ, DerivClauseQ, MatchQ, ClauseQ, BodyQ, GuardQ,
-        StmtQ, RangeQ, SourceStrictnessQ, SourceUnpackednessQ, BangQ,
+        TyLitQ, CxtQ, PredQ, DerivClauseQ, MatchQ, MatchesQ, ClauseQ, BodyQ,
+        GuardQ, StmtQ, RangeQ, SourceStrictnessQ, SourceUnpackednessQ, BangQ,
         BangTypeQ, VarBangTypeQ, StrictTypeQ, VarStrictTypeQ, FieldExpQ, PatQ,
         FieldPatQ, RuleBndrQ, TySynEqnQ, PatSynDirQ, PatSynArgsQ,
         FamilyResultSigQ, DerivStrategyQ,
@@ -37,14 +37,14 @@ module Language.Haskell.TH.Lib (
         fieldPat,
 
     -- *** Pattern Guards
-        normalB, guardedB, normalG, normalGE, patG, patGE, match, clause,
+        normalB, guardedB, normalG, normalGE, patG, patGE, match, matches, clause,
 
     -- *** Expressions
         dyn, varE, unboundVarE, labelE, implicitParamVarE, conE, litE, staticE,
         appE, appTypeE, uInfixE, parensE, infixE, infixApp, sectionL, sectionR,
-        lamE, lam1E, lamCaseE, tupE, unboxedTupE, unboxedSumE, condE, multiIfE,
-        letE, caseE, appsE, listE, sigE, recConE, recUpdE, stringE, fieldExp,
-        getFieldE, projectionE,
+        lamE, lam1E, lamCaseE, lamCasesE, tupE, unboxedTupE, unboxedSumE, condE,
+        multiIfE, letE, caseE, appsE, listE, sigE, recConE, recUpdE, stringE,
+        fieldExp, getFieldE, projectionE,
     -- **** Ranges
     fromE, fromThenE, fromToE, fromThenToE,
 
