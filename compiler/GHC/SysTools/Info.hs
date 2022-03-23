@@ -144,7 +144,7 @@ getLinkerInfo' logger dflags = do
         return $ GnuLD $ map Option
           [ -- Emit stack checks
             -- See Note [Windows stack allocations]
-           "-fstack-check" 
+           "-fstack-check"
           ]
       _ -> do
         -- In practice, we use the compiler as the linker here. Pass
