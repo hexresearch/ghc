@@ -1931,19 +1931,24 @@ pp_dotdot = text " .. "
 -}
 
 instance OutputableBndrId p => Outputable (HsMatchContext (GhcPass p)) where
-  ppr m@(FunRhs{})          = text "FunRhs" <+> ppr (mc_fun m) <+> ppr (mc_fixity m)
-  ppr LambdaExpr            = text "LambdaExpr"
-  ppr CaseAlt               = text "CaseAlt"
-  ppr LamCasesAlt           = text "LamCasesAlt"
-  ppr IfAlt                 = text "IfAlt"
-  ppr (ArrowMatchCtxt c)    = text "ArrowMatchCtxt" <+> ppr c
-  ppr PatBindRhs            = text "PatBindRhs"
-  ppr PatBindGuards         = text "PatBindGuards"
-  ppr RecUpd                = text "RecUpd"
-  ppr (StmtCtxt _)          = text "StmtCtxt _"
-  ppr ThPatSplice           = text "ThPatSplice"
-  ppr ThPatQuote            = text "ThPatQuote"
-  ppr PatSyn                = text "PatSyn"
+  ppr m@(FunRhs{})           = text "FunRhs" <+> ppr (mc_fun m) <+> ppr (mc_fixity m)
+  ppr LambdaExpr             = text "LambdaExpr"
+  ppr CaseAlt                = text "CaseAlt"
+  ppr (LamCaseAlt lcVariant) = text "LamCaseAlt" <+> ppr lcVariant
+  ppr IfAlt                  = text "IfAlt"
+  ppr (ArrowMatchCtxt c)     = text "ArrowMatchCtxt" <+> ppr c
+  ppr PatBindRhs             = text "PatBindRhs"
+  ppr PatBindGuards          = text "PatBindGuards"
+  ppr RecUpd                 = text "RecUpd"
+  ppr (StmtCtxt _)           = text "StmtCtxt _"
+  ppr ThPatSplice            = text "ThPatSplice"
+  ppr ThPatQuote             = text "ThPatQuote"
+  ppr PatSyn                 = text "PatSyn"
+
+instance Outputable LamCaseVariant where
+  ppr = text . \case
+    LamCase  -> "LamCase"
+    LamCases -> "LamCases"
 
 instance Outputable HsArrowMatchContext where
   ppr ProcExpr     = text "ProcExpr"
@@ -1959,22 +1964,22 @@ instance OutputableBndrId p
 -- Used to generate the string for a *runtime* error message
 matchContextErrString :: OutputableBndrId p
                       => HsMatchContext (GhcPass p) -> SDoc
-matchContextErrString (FunRhs{mc_fun=L _ fun})   = text "function" <+> ppr fun
-matchContextErrString CaseAlt                    = text "case"
-matchContextErrString LamCasesAlt                = text "\\cases"
-matchContextErrString IfAlt                      = text "multi-way if"
-matchContextErrString PatBindRhs                 = text "pattern binding"
-matchContextErrString PatBindGuards              = text "pattern binding guards"
-matchContextErrString RecUpd                     = text "record update"
-matchContextErrString LambdaExpr                 = text "lambda"
-matchContextErrString (ArrowMatchCtxt c)         = matchArrowContextErrString c
-matchContextErrString ThPatSplice                = panic "matchContextErrString"  -- Not used at runtime
-matchContextErrString ThPatQuote                 = panic "matchContextErrString"  -- Not used at runtime
-matchContextErrString PatSyn                     = panic "matchContextErrString"  -- Not used at runtime
-matchContextErrString (StmtCtxt (ParStmtCtxt c))   = matchContextErrString (StmtCtxt c)
-matchContextErrString (StmtCtxt (TransStmtCtxt c)) = matchContextErrString (StmtCtxt c)
-matchContextErrString (StmtCtxt (PatGuard _))      = text "pattern guard"
-matchContextErrString (StmtCtxt (ArrowExpr))       = text "'do' block"
+matchContextErrString (FunRhs{mc_fun=L _ fun})      = text "function" <+> ppr fun
+matchContextErrString CaseAlt                       = text "case"
+matchContextErrString (LamCaseAlt lcVariant)        = text $ lam_cases_keyword lcVariant
+matchContextErrString IfAlt                         = text "multi-way if"
+matchContextErrString PatBindRhs                    = text "pattern binding"
+matchContextErrString PatBindGuards                 = text "pattern binding guards"
+matchContextErrString RecUpd                        = text "record update"
+matchContextErrString LambdaExpr                    = text "lambda"
+matchContextErrString (ArrowMatchCtxt c)            = matchArrowContextErrString c
+matchContextErrString ThPatSplice                   = panic "matchContextErrString"  -- Not used at runtime
+matchContextErrString ThPatQuote                    = panic "matchContextErrString"  -- Not used at runtime
+matchContextErrString PatSyn                        = panic "matchContextErrString"  -- Not used at runtime
+matchContextErrString (StmtCtxt (ParStmtCtxt c))    = matchContextErrString (StmtCtxt c)
+matchContextErrString (StmtCtxt (TransStmtCtxt c))  = matchContextErrString (StmtCtxt c)
+matchContextErrString (StmtCtxt (PatGuard _))       = text "pattern guard"
+matchContextErrString (StmtCtxt (ArrowExpr))        = text "'do' block"
 matchContextErrString (StmtCtxt (HsDoStmt flavour)) = matchDoContextErrString flavour
 
 matchArrowContextErrString :: HsArrowMatchContext -> SDoc

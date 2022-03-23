@@ -3248,7 +3248,7 @@ alt(pats) :: { forall b. DisambECP b => PV (LMatch GhcPs (LocatedA b)) }
         : pats alt_rhs { $2 >>= \ $2 ->
                          acsA (\cs -> sLLAsl $1 $>
                                          (Match { m_ext = EpAnn (listAsAnchor $1) [] cs
-                                                , m_ctxt = LamCasesAlt -- XXX JB this is not right
+                                                , m_ctxt = LamCaseAlt LamCase -- XXX JB this is not right
                                                 , m_pats = $1
                                                 , m_grhss = unLoc $2 }))}
 

@@ -955,11 +955,11 @@ cvtl e = wrapLA (cvt e)
                             ; return $ HsLam noExtField (mkMatchGroup th_origin
                                              (noLocA [mkSimpleMatch LambdaExpr
                                              pats e']))}
-    cvt (LamCaseE ms) = do { ms' <- mapM (cvtMatch CaseAlt) ms
+    cvt (LamCaseE ms) = do { ms' <- mapM (cvtMatch $ LamCaseAlt LamCase) ms
                            ; th_origin <- getOrigin
                            ; return $ HsLamCase noAnn LamCase
                                (mkMatchGroup th_origin (noLocA ms')) }
-    cvt (LamCasesE ms) = do { ms' <- mapM (cvtMatches LamCasesAlt) ms
+    cvt (LamCasesE ms) = do { ms' <- mapM (cvtMatches $ LamCaseAlt LamCases) ms
                             ; th_origin <- getOrigin
                             ; return $ HsLamCase noAnn LamCases
                                 (mkMatchGroup th_origin (noLocA ms')) }

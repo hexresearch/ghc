@@ -1228,16 +1228,13 @@ emptyCaseErr ctxt = TcRnUnknownMessage $ mkPlainError noHints $
   where
     pp_ctxt :: HsMatchContext GhcRn -> SDoc
     pp_ctxt c = case c of
-      -- Note that CaseAlt is also used for \case expressions
-      -- XXX JB maybe we could circumvent that by adding a field to ParseContext telling us whether we are in \case?
-      -- XXX JB maybe that would even allow us to collapse nalt and alt into one by adding a field of type (Maybe (LamCaseVariant))
-      -- XXX JB However I'm not sure about that because I don't know if you can use that to control whether pat or apats is parsed...
-      -- XXX JB the answer is yes! with parameterized productions. Well, technically the answer is no, but that feature is good enough
       CaseAlt                     -> text "case expression"
-      LamCasesAlt                 -> text "\\cases expression"
+      -- XXX JB please make sure this works, i.e. empty \case should show \case, not case in the error
+      -- XXX JB also note that empty \cases should be disallowed! Presumably by modifying empty_case_ok and changing the mesage in emptyCaseErr if we're in \cases
+      LamCaseAlt lcVariant        -> text $ "\\case" ++ ['s' | lcVariant == LamCases] ++ " expression"
       ArrowMatchCtxt ArrowCaseAlt -> text "case expression"
       ArrowMatchCtxt KappaExpr    -> text "kappa abstraction"
-      _             -> text "(unexpected)" <+> pprMatchContextNoun c
+      _                           -> text "(unexpected)" <+> pprMatchContextNoun c
 
 {-
 ************************************************************************

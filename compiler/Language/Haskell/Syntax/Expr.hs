@@ -1662,8 +1662,8 @@ data HsMatchContext p
                                 -- ^A pattern matching on an argument of a
                                 -- function binding
   | LambdaExpr                  -- ^Patterns of a lambda
-  | CaseAlt                     -- ^Patterns and guards in a case alternative or @\case@
-  | LamCasesAlt                 -- ^Patterns and guards in @\cases@
+  | CaseAlt                     -- ^Patterns and guards in a case alternative
+  | LamCaseAlt LamCaseVariant   -- ^Patterns and guards in @\case@ and @\cases@
   | IfAlt                       -- ^Guards of a multi-way if alternative
   | ArrowMatchCtxt              -- ^A pattern match inside arrow notation
       HsArrowMatchContext
@@ -1763,7 +1763,7 @@ isMonadDoCompContext (MDoExpr _)  = False
 matchSeparator :: HsMatchContext p -> SDoc
 matchSeparator FunRhs{}         = text "="
 matchSeparator CaseAlt          = text "->"
-matchSeparator LamCasesAlt      = text "->"
+matchSeparator LamCaseAlt{}     = text "->"
 matchSeparator IfAlt            = text "->"
 matchSeparator LambdaExpr       = text "->"
 matchSeparator ArrowMatchCtxt{} = text "->"
@@ -1789,24 +1789,22 @@ pprMatchContext ctxt
 
 pprMatchContextNoun :: forall p. (Outputable (IdP p), UnXRec p)
                     => HsMatchContext p -> SDoc
-pprMatchContextNoun (FunRhs {mc_fun=fun})
-                                    = text "equation for"
-                                      <+> quotes (ppr (unXRec @p fun))
--- Note that CaseAlt is also used for \case
--- XXX JB is this still the plan?
-pprMatchContextNoun CaseAlt         = text "case alternative"
-pprMatchContextNoun LamCasesAlt     = text "\\cases alternative"
-pprMatchContextNoun IfAlt           = text "multi-way if alternative"
-pprMatchContextNoun RecUpd          = text "record-update construct"
-pprMatchContextNoun ThPatSplice     = text "Template Haskell pattern splice"
-pprMatchContextNoun ThPatQuote      = text "Template Haskell pattern quotation"
-pprMatchContextNoun PatBindRhs      = text "pattern binding"
-pprMatchContextNoun PatBindGuards   = text "pattern binding guards"
-pprMatchContextNoun LambdaExpr      = text "lambda abstraction"
-pprMatchContextNoun (ArrowMatchCtxt c)= pprArrowMatchContextNoun c
-pprMatchContextNoun (StmtCtxt ctxt) = text "pattern binding in"
-                                      $$ pprAStmtContext ctxt
-pprMatchContextNoun PatSyn          = text "pattern synonym declaration"
+pprMatchContextNoun (FunRhs {mc_fun=fun})  = text "equation for"
+                                             <+> quotes (ppr (unXRec @p fun))
+pprMatchContextNoun CaseAlt                = text "case alternative"
+-- XXX JB can we search for all \\case and see if we can replace them all by a unified lamCaseKeyword in some utils module?
+pprMatchContextNoun (LamCaseAlt lcVariant) = text $ "\\case" ++ ['s' | lcVariant == LamCases] ++ " alternative"
+pprMatchContextNoun IfAlt                  = text "multi-way if alternative"
+pprMatchContextNoun RecUpd                 = text "record-update construct"
+pprMatchContextNoun ThPatSplice            = text "Template Haskell pattern splice"
+pprMatchContextNoun ThPatQuote             = text "Template Haskell pattern quotation"
+pprMatchContextNoun PatBindRhs             = text "pattern binding"
+pprMatchContextNoun PatBindGuards          = text "pattern binding guards"
+pprMatchContextNoun LambdaExpr             = text "lambda abstraction"
+pprMatchContextNoun (ArrowMatchCtxt c)     = pprArrowMatchContextNoun c
+pprMatchContextNoun (StmtCtxt ctxt)        = text "pattern binding in"
+                                             $$ pprAStmtContext ctxt
+pprMatchContextNoun PatSyn                 = text "pattern synonym declaration"
 
 pprArrowMatchContextNoun :: HsArrowMatchContext -> SDoc
 pprArrowMatchContextNoun ProcExpr     = text "arrow proc pattern"
