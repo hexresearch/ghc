@@ -1411,7 +1411,7 @@ pprMatch (Match { m_pats = pats, m_ctxt = ctxt, m_grhss = grhss })
             LambdaExpr -> (char '\\', pats)
 
             _ -> case pats of
-                      -- XXX JB will this cause problems when we try to pretty print cases?
+                      -- XXX JB will this cause problems when we try to pretty print \cases?
                       -- XXX JB   first of all, we always want parens, and second, have length > 1
                    []    -> (empty, [])
                    [pat] -> (ppr pat, [])  -- No parens around the single pat in a case

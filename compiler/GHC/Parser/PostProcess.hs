@@ -1628,7 +1628,7 @@ instance DisambECP (HsCmd GhcPs) where
     return $ L (noAnnSrcSpan l) (HsCmdCase (EpAnn (spanAsAnchor l) anns cs) c mg)
   mkHsLamCasePV l lcVariant (L lm m) anns = do
     cs <- getCommentsFor l
-    let mg = mkMatchGroup FromSource (L lm m)
+    let mg = mkLamCaseMatchGroup FromSource lcVariant (L lm m)
     return $ L (noAnnSrcSpan l) (HsCmdLamCase (EpAnn (spanAsAnchor l) anns cs) lcVariant mg)
   type FunArg (HsCmd GhcPs) = HsExpr GhcPs
   superFunArg m = m
@@ -1714,7 +1714,7 @@ instance DisambECP (HsExpr GhcPs) where
     return $ L (noAnnSrcSpan l) (HsCase (EpAnn (spanAsAnchor l) anns cs) e mg)
   mkHsLamCasePV l lcVariant (L lm m) anns = do
     cs <- getCommentsFor l
-    let mg = mkMatchGroup FromSource (L lm m)
+    let mg = mkLamCaseMatchGroup FromSource lcVariant (L lm m)
     return $ L (noAnnSrcSpan l) (HsLamCase (EpAnn (spanAsAnchor l) anns cs) lcVariant mg)
   type FunArg (HsExpr GhcPs) = HsExpr GhcPs
   superFunArg m = m
