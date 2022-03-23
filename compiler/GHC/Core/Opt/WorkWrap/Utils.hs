@@ -231,7 +231,7 @@ mkWwBodies opts fun_id arg_vars res_ty demands res_cpr
               zapped_arg_vars = map zap_var arg_vars
               (subst, cloned_arg_vars) = cloneBndrs empty_subst uniq_supply zapped_arg_vars
               res_ty' = GHC.Core.Subst.substTy subst res_ty
-              init_cbv_marks = map (const NotMarkedCbv) cloned_arg_vars
+              init_cbv_marks = map (const NotMarkedStrict) cloned_arg_vars
 
         ; (useful1, work_args_cbv, wrap_fn_str, fn_args)
              <- mkWWstr opts cloned_arg_vars init_cbv_marks
@@ -561,26 +561,26 @@ see #17478.
 --
 --   * @dc @exs flds :: T tys@
 --   * @co :: T tys ~ ty@
-data DataConPatContext
+data DataConPatContext s
   = DataConPatContext
   { dcpc_dc      :: !DataCon
   , dcpc_tc_args :: ![Type]
   , dcpc_co      :: !Coercion
+  , dcpc_args    :: [s]
   }
 
 -- | Describes the outer shape of an argument to be unboxed or left as-is
 -- Depending on how @s@ is instantiated (e.g., 'Demand' or 'Cpr').
-data UnboxingDecision s
+data UnboxingDecision unboxing_info
   = StopUnboxing
   -- ^ We ran out of strictness info. Leave untouched.
   | DropAbsent
   -- ^ The argument/field was absent. Drop it.
-  | Unbox !DataConPatContext [s]
+  | Unbox !unboxing_info
   -- ^ The argument is used strictly or the returned product was constructed, so
   -- unbox it.
-  -- The 'DataConPatContext' carries the bits necessary for
-  -- instantiation with 'dataConRepInstPat'.
-  -- The @[s]@ carries the bits of information with which we can continue
+  -- The 'DataConPatContext s' carries the bits necessary for
+  -- instantiation with 'dataConRepInstPat', and to continue
   -- unboxing, e.g. @s@ will be 'Demand' or 'Cpr'.
   | Unlift
   -- ^ The argument can't be unboxed, but we want it to be passed evaluated to the worker.
@@ -611,19 +611,24 @@ wantToUnboxArg
   -> FamInstEnvs
   -> Type                -- ^ Type of the argument
   -> Demand              -- ^ How the arg was used
-  -> UnboxingDecision Demand
+  -> UnboxingDecision (DataConPatContext Demand)
 -- See Note [Which types are unboxed?]
 wantToUnboxArg do_unlifting fam_envs ty dmd@(n :* sd)
   | isAbs n
   = DropAbsent
 
   | Just (tc, tc_args, co) <- normSplitTyConApp_maybe fam_envs ty
+  , not (isClassTyCon tc)  -- Never unbox class dictionaries
   , Just dc <- tyConSingleAlgDataCon_maybe tc
   , let arity = dataConRepArity dc
-  , Just (Unboxed, ds) <- viewProd arity sd -- See Note [Boxity analysis]
-  -- NB: No strictness or evaluatedness checks for unboxing here.
-  -- That is done by 'finaliseArgBoxities'!
-  = Unbox (DataConPatContext dc tc_args co) ds
+  , Just (Unboxed, dmds) <- viewProd arity sd -- See Note [Boxity analysis]
+  , dmds `lengthIs` dataConRepArity dc
+  -- NB: does not look at strictness because
+  --     wantToUnboxArg is called in mkWWstr_one, by which point lazy args
+  --     are marked Boxed (by finaliseArgBoxities), so a strictness check is
+  --     entirely redundant.
+  = Unbox (DataConPatContext { dcpc_dc = dc, dcpc_tc_args = tc_args
+                             , dcpc_co = co, dcpc_args = dmds })
 
   -- See Note [Strict Worker Ids]
   | do_unlifting
@@ -638,7 +643,8 @@ wantToUnboxArg do_unlifting fam_envs ty dmd@(n :* sd)
 
 
 -- | Unboxing strategy for constructed results.
-wantToUnboxResult :: FamInstEnvs -> Type -> Cpr -> UnboxingDecision Cpr
+wantToUnboxResult :: FamInstEnvs -> Type -> Cpr
+                  -> UnboxingDecision (DataConPatContext Cpr)
 -- See Note [Which types are unboxed?]
 wantToUnboxResult fam_envs ty cpr
   | Just (con_tag, arg_cprs) <- asConCpr cpr
@@ -655,7 +661,8 @@ wantToUnboxResult fam_envs ty cpr
   -- Deactivates CPR worker/wrapper splits on constructors with non-linear
   -- arguments, for the moment, because they require unboxed tuple with variable
   -- multiplicity fields.
-  = Unbox (DataConPatContext dc tc_args co) arg_cprs
+  = Unbox (DataConPatContext { dcpc_dc = dc, dcpc_tc_args = tc_args
+                             , dcpc_co = co, dcpc_args = arg_cprs })
 
   | otherwise
   = StopUnboxing
@@ -810,7 +817,7 @@ See also Note [Tag Inference] and Note [Strict Worker Ids]
 mkWWstr :: WwOpts
         -> [Var]                         -- Wrapper args; have their demand info on them
                                          --  *Includes type variables*
-        -> [CbvMark]                     -- cbv info for arguments
+        -> [StrictnessMark]              -- Strictness-mark info for arguments
         -> UniqSM (Bool,                 -- Will this result in a useful worker
                    [(Var,CbvMark)],      -- Worker args/their call-by-value semantics.
                    CoreExpr -> CoreExpr, -- Wrapper body, lacking the worker call
@@ -819,20 +826,18 @@ mkWWstr :: WwOpts
                    [CoreExpr])           -- Reboxed args for the call to the
                                          -- original RHS. Corresponds one-to-one
                                          -- with the wrapper arg vars
-mkWWstr opts args cbv_info
-  = go args cbv_info
+mkWWstr opts args str_marks
+  = go args str_marks
   where
-    go_one arg cbv = mkWWstr_one opts arg cbv
-
-    go []           _ = return (badWorker, [], nop_fn, [])
-    go (arg : args) (cbv:cbvs)
-      =               do { (useful1, args1, wrap_fn1, wrap_arg)  <- go_one arg cbv
-                         ; (useful2, args2, wrap_fn2, wrap_args) <- go args cbvs
-                         ; return ( useful1 || useful2
-                                  , args1 ++ args2
-                                  , wrap_fn1 . wrap_fn2
-                                  , wrap_arg:wrap_args ) }
-    go _ _ = panic "mkWWstr: Impossible - cbv/arg length missmatch"
+    go [] _ = return (badWorker, [], nop_fn, [])
+    go (arg : args) (str:strs)
+      = do { (useful1, args1, wrap_fn1, wrap_arg)  <- mkWWstr_one opts arg str
+           ; (useful2, args2, wrap_fn2, wrap_args) <- go args strs
+           ; return ( useful1 || useful2
+                    , args1 ++ args2
+                    , wrap_fn1 . wrap_fn2
+                    , wrap_arg:wrap_args ) }
+    go _ _ = panic "mkWWstr: Impossible - str/arg length missmatch"
 
 ----------------------
 -- mkWWstr_one wrap_var = (useful, work_args, wrap_fn, wrap_arg)
@@ -843,9 +848,9 @@ mkWWstr opts args cbv_info
 -- See Note [Worker/wrapper for Strictness and Absence]
 mkWWstr_one :: WwOpts
             -> Var
-            -> CbvMark
+            -> StrictnessMark
             -> UniqSM (Bool, [(Var,CbvMark)], CoreExpr -> CoreExpr, CoreExpr)
-mkWWstr_one opts arg marked_cbv =
+mkWWstr_one opts arg str_mark =
   case wantToUnboxArg True fam_envs arg_ty arg_dmd of
     _ | isTyVar arg -> do_nothing
 
@@ -857,7 +862,7 @@ mkWWstr_one opts arg marked_cbv =
          -- (that's what mkAbsentFiller does)
       -> return (goodWorker, [], nop_fn, absent_filler)
 
-    Unbox dcpc ds -> unbox_one_arg opts arg ds dcpc marked_cbv
+    Unbox dcpc -> unbox_one_arg opts arg dcpc str_mark
 
     Unlift -> return  ( wwForUnlifting opts
                       , [(setIdUnfolding arg evaldUnfolding, MarkedCbv)]
@@ -870,19 +875,24 @@ mkWWstr_one opts arg marked_cbv =
     fam_envs   = wo_fam_envs opts
     arg_ty     = idType arg
     arg_dmd    = idDemandInfo arg
-    -- Type args don't get cbv marks
-    arg_cbv    = if isTyVar arg then NotMarkedCbv else marked_cbv
+    arg_cbv | isId arg  -- type args don't get cbv marks
+            , isMarkedStrict str_mark
+            , not (isUnliftedType arg_ty)
+            = MarkedCbv
+            | otherwise
+            = NotMarkedCbv
+
     do_nothing = return (badWorker, [(arg,arg_cbv)], nop_fn, varToCoreExpr arg)
 
+
 unbox_one_arg :: WwOpts
-          -> Var
-          -> [Demand]
-          -> DataConPatContext
-          -> CbvMark
-          -> UniqSM (Bool, [(Var,CbvMark)], CoreExpr -> CoreExpr, CoreExpr)
-unbox_one_arg opts arg_var ds
+              -> Var
+              -> DataConPatContext Demand
+              -> StrictnessMark
+              -> UniqSM (Bool, [(Var,CbvMark)], CoreExpr -> CoreExpr, CoreExpr)
+unbox_one_arg opts arg_var
           DataConPatContext { dcpc_dc = dc, dcpc_tc_args = tc_args
-                            , dcpc_co = co }
+                            , dcpc_co = co, dcpc_args = ds }
           _marked_cbv
   = do { pat_bndrs_uniqs <- getUniquesM
        ; let ex_name_fss = map getOccFS $ dataConExTyCoVars dc
@@ -894,20 +904,16 @@ unbox_one_arg opts arg_var ds
              unbox_fn = mkUnpackCase (Var arg_var) co (idMult arg_var)
                                      dc (ex_tvs' ++ arg_ids')
              -- Mark arguments coming out of strict fields as evaluated and give them cbv semantics. See Note [Strict Worker Ids]
-             cbv_arg_marks = zipWithEqual "unbox_one_arg" bangToMark (dataConRepStrictness dc) arg_ids'
-             unf_args = zipWith setEvald arg_ids' cbv_arg_marks
-             cbv_marks = (map (const NotMarkedCbv) ex_tvs') ++ cbv_arg_marks
-       ; (_sub_args_quality, worker_args, wrap_fn, wrap_args) <- mkWWstr opts (ex_tvs' ++ unf_args) cbv_marks
+             str_marks = dataConRepStrictness dc
+             unf_args  = zipWith set_evald arg_ids' str_marks
+             all_str_marks = (map (const NotMarkedStrict) ex_tvs') ++ str_marks
+       ; (_sub_args_quality, worker_args, wrap_fn, wrap_args) <- mkWWstr opts (ex_tvs' ++ unf_args) all_str_marks
        ; let wrap_arg = mkConApp dc (map Type tc_args ++ wrap_args) `mkCast` mkSymCo co
        ; return (goodWorker, worker_args, unbox_fn . wrap_fn, wrap_arg) }
                           -- Don't pass the arg, rebox instead
-    where bangToMark :: StrictnessMark -> Id -> CbvMark
-          bangToMark NotMarkedStrict _ = NotMarkedCbv
-          bangToMark MarkedStrict v
-            | isUnliftedType (idType v) = NotMarkedCbv
-            | otherwise                 = MarkedCbv
-          setEvald var NotMarkedCbv  = var
-          setEvald var MarkedCbv     = setIdUnfolding var evaldUnfolding
+    where
+      set_evald var NotMarkedStrict  = var
+      set_evald var MarkedStrict     = setIdUnfolding var evaldUnfolding
 
 -- | Tries to find a suitable absent filler to bind the given absent identifier
 -- to. See Note [Absent fillers].
@@ -1424,17 +1430,17 @@ mkWWcpr_one :: WwOpts -> Id -> Cpr -> UniqSM CprWwResultOne
 -- ^ See if we want to unbox the result and hand off to 'unbox_one_result'.
 mkWWcpr_one opts res_bndr cpr
   | assert (not (isTyVar res_bndr) ) True
-  , Unbox dcpc arg_cprs <- wantToUnboxResult (wo_fam_envs opts) (idType res_bndr) cpr
-  = unbox_one_result opts res_bndr arg_cprs dcpc
+  , Unbox dcpc <- wantToUnboxResult (wo_fam_envs opts) (idType res_bndr) cpr
+  = unbox_one_result opts res_bndr dcpc
   | otherwise
   = return (badWorker, unitOL res_bndr, varToCoreExpr res_bndr, nop_fn)
 
 unbox_one_result
-  :: WwOpts -> Id -> [Cpr] -> DataConPatContext -> UniqSM CprWwResultOne
+  :: WwOpts -> Id -> DataConPatContext Cpr -> UniqSM CprWwResultOne
 -- ^ Implements the main bits of part (2) of Note [Worker/wrapper for CPR]
-unbox_one_result opts res_bndr arg_cprs
+unbox_one_result opts res_bndr
                  DataConPatContext { dcpc_dc = dc, dcpc_tc_args = tc_args
-                                   , dcpc_co = co } = do
+                                   , dcpc_co = co, dcpc_args = arg_cprs } = do
   -- unboxer (free in `res_bndr`):       |   builder (where <i> builds what was
   --   ( case res_bndr of (i, j) -> )    |            bound to i)
   --   ( case i of I# a ->          )    |

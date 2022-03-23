@@ -379,3 +379,5 @@ test('T19790',  normal, compile, ['-O -ddump-rule-firings'])
 # -O0 is needed to trigger it because that switches rules off,
 # which (before the fix) lost crucial dependencies
 test('T20820',  normal, compile, ['-O0'])
+
+test('T21286',  normal, multimod_compile, ['T21286', '-O -ddump-rule-firings'])
