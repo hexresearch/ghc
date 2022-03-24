@@ -94,7 +94,7 @@ module Language.Haskell.Syntax.Decls (
 import GHC.Prelude
 
 import {-# SOURCE #-} Language.Haskell.Syntax.Expr
-  ( HsExpr, HsSplice )
+  ( HsExpr, HsUntypedSplice )
         -- Because Expr imports Decls via HsBracket
 
 import Language.Haskell.Syntax.Binds
@@ -243,7 +243,7 @@ type LSpliceDecl pass = XRec pass (SpliceDecl pass)
 data SpliceDecl p
   = SpliceDecl                  -- Top level splice
         (XSpliceDecl p)
-        (XRec p (HsSplice p))
+        (XRec p (HsUntypedSplice p))
         SpliceExplicitFlag
   | XSpliceDecl !(XXSpliceDecl p)
 

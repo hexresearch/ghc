@@ -420,7 +420,6 @@ type instance XArithSeq      GhcPs = EpAnn [AddEpAnn]
 type instance XArithSeq      GhcRn = NoExtField
 type instance XArithSeq      GhcTc = PostTcExpr
 
-type instance XSpliceE       (GhcPass _) = EpAnnCO
 type instance XProc          (GhcPass _) = EpAnn [AddEpAnn]
 
 type instance XStatic        GhcPs = EpAnn [AddEpAnn]
@@ -714,7 +713,12 @@ ppr_expr (ExprWithTySig _ expr sig)
 
 ppr_expr (ArithSeq _ _ info) = brackets (ppr info)
 
-ppr_expr (HsSpliceE _ s)         = pprSplice s
+ppr_expr (HsTypedSplice ext e)   =
+    case ghcPass @p of
+      GhcPs | (_, _, n) <- ext -> pprTypedSplice n e
+      GhcRn | (_, _, n) <- ext -> pprTypedSplice n e
+      GhcTc | (n, _)    <- ext -> pprTypedSplice n e
+ppr_expr (HsUntypedSplice _ s) = pprUntypedSplice s
 
 ppr_expr (HsTypedBracket b e)
   = case ghcPass @p of
@@ -868,7 +872,8 @@ hsExprNeedsParens prec = go
     go (ExprWithTySig{})              = prec >= sigPrec
     go (ArithSeq{})                   = False
     go (HsPragE{})                    = prec >= appPrec
-    go (HsSpliceE{})                  = False
+    go (HsTypedSplice{})              = False
+    go (HsUntypedSplice{})            = False
     go (HsTypedBracket{})             = False
     go (HsUntypedBracket{})           = False
     go (HsProc{})                     = prec > topPrec
@@ -1701,35 +1706,29 @@ instance Data ThModFinalizers where
   toConstr  a   = mkConstr (dataTypeOf a) "ThModFinalizers" [] Data.Prefix
   dataTypeOf a  = mkDataType "HsExpr.ThModFinalizers" [toConstr a]
 
-
--- | Haskell Spliced Thing
---
--- Values that can result from running a splice.
-data HsSplicedThing
-    = HsSplicedExpr (HsExpr GhcRn) -- ^ Haskell Spliced Expression
-    | HsSplicedTy   (HsType GhcRn) -- ^ Haskell Spliced Type
-    | HsSplicedPat  (Pat GhcRn)    -- ^ Haskell Spliced Pattern
-
-newtype HsSplicedT = HsSplicedT DelayedSplice deriving (Data)
-
--- (IdP id): A unique name to identify this splice point
-type instance XTypedSplice   (GhcPass p) = (EpAnn [AddEpAnn], IdP (GhcPass p))
-
--- (IdP id): A unique name to identify this splice point
-type instance XUntypedSplice (GhcPass p) = (EpAnn [AddEpAnn], IdP (GhcPass p))
-
-type instance XQuasiQuote    (GhcPass p) = ( (IdP (GhcPass p))   -- Splice point
-                                           , (IdP (GhcPass p)) ) -- Quoter
-
-type instance XXSplice       GhcPs       = DataConCantHappen
-
 -- See Note [Delaying modFinalizers in untyped splices] in GHC.Rename.Splice.
 -- This is the result of splicing a splice. It is produced by
 -- the renamer and consumed by the typechecker. It lives only between the two.
-type instance XXSplice       GhcRn       = ( ThModFinalizers     -- TH finalizers produced by the splice.
-                                           , HsSplicedThing ) -- The result of splicing
+data HsUntypedSpliceResult thing = HsUntypedSpliceResult
+    { utsplice_result_finalizers :: ThModFinalizers -- ^ TH finalizers produced by the splice.
+    , utsplice_result            :: thing -- ^ The result of splicing; See Note [Lifecycle of a splice]
+    }
 
-type instance XXSplice       GhcTc       = HsSplicedT
+-- (IdP id): A unique name to identify this splice point
+type instance XTypedSplice   GhcPs = (EpAnnCO, EpAnn [AddEpAnn], IdP GhcPs)
+type instance XTypedSplice   GhcRn = (EpAnnCO, EpAnn [AddEpAnn], IdP GhcRn)
+type instance XTypedSplice   GhcTc = (IdP GhcTc, DelayedSplice)
+
+type instance XUntypedSplice GhcPs = EpAnnCO
+type instance XUntypedSplice GhcRn = HsUntypedSpliceResult (HsExpr GhcRn)
+type instance XUntypedSplice GhcTc = HsUntypedSpliceResult (HsExpr GhcRn)
+
+-- HsUntypedSplice
+type instance XUntypedSpliceExpr (GhcPass p) = ( EpAnn [AddEpAnn]
+                                               , IdP (GhcPass p) )     -- A unique name to identify this splice point
+type instance XQuasiQuote        (GhcPass p) = ( IdP (GhcPass p)   -- Splice point
+                                               , IdP (GhcPass p) ) -- Quoter
+type instance XXUntypedSplice    _           = DataConCantHappen
 
 -- See Note [Running typed splices in the zonker]
 -- These are the arguments that are passed to `GHC.Tc.Gen.Splice.runTopSplice`
@@ -1774,13 +1773,13 @@ bracket code.  So for example
     [| f $(g x) |]
 looks like
 
-    HsUntypedBracket _ (HsApp (HsVar "f") (HsSpliceE _ (HsUntypedSplice sn (g x)))
+    HsUntypedBracket _ (HsApp (HsVar "f") (HsUntypedSplice _ (HsUntypedSpliceExpr sn (g x)))
 
 which the renamer rewrites to
 
     HsUntypedBracket
         [PendingRnSplice UntypedExpSplice sn (g x)]
-        (HsApp (HsVar f) (HsSpliceE _ (HsUntypedSplice sn (g x)))
+        (HsApp (HsVar f) (HsUntypedSplice _ (HsUntypedSpliceExpr sn (g x)))
 
 * The 'sn' is the Name of the splice point, the SplicePointName
 
@@ -1789,7 +1788,7 @@ which the renamer rewrites to
 
 * Note that a nested splice, such as the `$(g x)` now appears twice:
   - In the PendingRnSplice: this is the version that will later be typechecked
-  - In the HsSpliceE in the body of the bracket. This copy is used only for pretty printing.
+  - In the HsUntypedSplice in the body of the bracket. This copy is used only for pretty printing.
 
 There are four varieties of pending splices generated by the renamer,
 distinguished by their UntypedSpliceFlavour
@@ -1822,46 +1821,34 @@ checker:
         [||1 + $$(f 2)||]
 -}
 
-instance Outputable HsSplicedThing where
-  ppr (HsSplicedExpr e) = ppr_expr e
-  ppr (HsSplicedTy   t) = ppr t
-  ppr (HsSplicedPat  p) = ppr p
-
-instance (OutputableBndrId p) => Outputable (HsSplice (GhcPass p)) where
-  ppr s = pprSplice s
+instance (OutputableBndrId p) => Outputable (HsUntypedSplice (GhcPass p)) where
+  ppr s = pprUntypedSplice s
 
 pprPendingSplice :: (OutputableBndrId p)
                  => SplicePointName -> LHsExpr (GhcPass p) -> SDoc
 pprPendingSplice n e = angleBrackets (ppr n <> comma <+> ppr (stripParensLHsExpr e))
 
 pprSpliceDecl ::  (OutputableBndrId p)
-          => HsSplice (GhcPass p) -> SpliceExplicitFlag -> SDoc
-pprSpliceDecl e@HsQuasiQuote{} _ = pprSplice e
+          => HsUntypedSplice (GhcPass p) -> SpliceExplicitFlag -> SDoc
+pprSpliceDecl e@HsQuasiQuote{} _ = pprUntypedSplice e
 pprSpliceDecl e ExplicitSplice   = text "$" <> ppr_splice_decl e
 pprSpliceDecl e ImplicitSplice   = ppr_splice_decl e
 
 ppr_splice_decl :: (OutputableBndrId p)
-                => HsSplice (GhcPass p) -> SDoc
-ppr_splice_decl (HsUntypedSplice (_, n) _ e) = ppr_splice empty n e empty
-ppr_splice_decl e = pprSplice e
+                => HsUntypedSplice (GhcPass p) -> SDoc
+ppr_splice_decl (HsUntypedSpliceExpr (_, n) _ e) = ppr_splice empty n e empty
+ppr_splice_decl e = pprUntypedSplice e
 
-pprSplice :: forall p. (OutputableBndrId p) => HsSplice (GhcPass p) -> SDoc
-pprSplice (HsTypedSplice (_, n) DollarSplice e)
-  = ppr_splice (text "$$") n e empty
-pprSplice (HsTypedSplice _ BareSplice _ )
-  = panic "Bare typed splice"  -- impossible
-pprSplice (HsUntypedSplice (_, n) DollarSplice e)
-  = ppr_splice (text "$")  n e empty
-pprSplice (HsUntypedSplice (_, n) BareSplice e)
-  = ppr_splice empty  n e empty
-pprSplice (HsQuasiQuote (n, q) _ s)      = ppr_quasi n q s
-pprSplice (XSplice x)                   = case ghcPass @p of
-#if __GLASGOW_HASKELL__ < 811
-                                            GhcPs -> dataConCantHappen x
-#endif
-                                            GhcRn | (_, thing) <- x -> ppr thing
-                                            GhcTc -> case x of
-                                                       HsSplicedT _ -> text "Unevaluated typed splice"
+pprTypedSplice :: (OutputableBndrId p) => IdP (GhcPass p) -> LHsExpr (GhcPass p) -> SDoc
+pprTypedSplice n e = ppr_splice (text "$$") n e empty
+
+pprUntypedSplice :: forall p. (OutputableBndrId p) => HsUntypedSplice (GhcPass p) -> SDoc
+pprUntypedSplice (HsUntypedSpliceExpr (_, n) DollarSplice e)
+  = ppr_splice (text "$") n e empty
+pprUntypedSplice (HsUntypedSpliceExpr (_, n) BareSplice e)
+  = ppr_splice empty n e empty
+pprUntypedSplice (HsQuasiQuote (n, q) s)
+  = ppr_quasi n q (unLoc s)
 
 ppr_quasi :: OutputableBndr p => p -> p -> FastString -> SDoc
 ppr_quasi n quoter quote = whenPprDebug (brackets (ppr n)) <>
@@ -2076,7 +2063,7 @@ type instance Anno (GRHS (GhcPass p) (LocatedA (HsCmd  (GhcPass p)))) = SrcAnn N
 type instance Anno (StmtLR (GhcPass pl) (GhcPass pr) (LocatedA (HsExpr (GhcPass pr)))) = SrcSpanAnnA
 type instance Anno (StmtLR (GhcPass pl) (GhcPass pr) (LocatedA (HsCmd  (GhcPass pr)))) = SrcSpanAnnA
 
-type instance Anno (HsSplice (GhcPass p)) = SrcSpanAnnA
+type instance Anno (HsUntypedSplice (GhcPass p)) = SrcSpanAnnA
 
 type instance Anno [LocatedA (StmtLR (GhcPass pl) (GhcPass pr) (LocatedA (HsExpr (GhcPass pr))))] = SrcSpanAnnL
 type instance Anno [LocatedA (StmtLR (GhcPass pl) (GhcPass pr) (LocatedA (HsCmd  (GhcPass pr))))] = SrcSpanAnnL

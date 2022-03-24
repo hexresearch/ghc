@@ -380,11 +380,11 @@ mkSpliceDecl :: LHsExpr GhcPs -> P (LHsDecl GhcPs)
 -- Typed splices are not allowed at the top level, thus we do not represent them
 -- as spliced declaration.  See #10945
 mkSpliceDecl lexpr@(L loc expr)
-  | HsSpliceE _ splice@(HsUntypedSplice {}) <- expr = do
+  | HsUntypedSplice _ splice@(HsUntypedSpliceExpr {}) <- expr = do
     cs <- getCommentsFor (locA loc)
     return $ L (addCommentsToSrcAnn loc cs) $ SpliceD noExtField (SpliceDecl noExtField (L loc splice) ExplicitSplice)
 
-  | HsSpliceE _ splice@(HsQuasiQuote {}) <- expr = do
+  | HsUntypedSplice _ splice@(HsQuasiQuote {}) <- expr = do
     cs <- getCommentsFor (locA loc)
     return $ L (addCommentsToSrcAnn loc cs) $ SpliceD noExtField (SpliceDecl noExtField (L loc splice) ExplicitSplice)
 
@@ -1527,7 +1527,7 @@ class (b ~ (Body b) GhcPs, AnnoBody b) => DisambECP b where
   -- | Disambiguate "[a,b,c]" (list syntax)
   mkHsExplicitListPV :: SrcSpan -> [LocatedA b] -> AnnList -> PV (LocatedA b)
   -- | Disambiguate "$(...)" and "[quasi|...|]" (TH splices)
-  mkHsSplicePV :: Located (HsSplice GhcPs) -> PV (Located b)
+  mkHsSplicePV :: Located (HsUntypedSplice GhcPs) -> PV (Located b)
   -- | Disambiguate "f { a = b, ... }" syntax (record construction and record updates)
   mkHsRecordPV ::
     Bool -> -- Is OverloadedRecordUpdate in effect?
@@ -1750,7 +1750,7 @@ instance DisambECP (HsExpr GhcPs) where
     return $ L (noAnnSrcSpan l) (ExplicitList (EpAnn (spanAsAnchor l) anns cs) xs)
   mkHsSplicePV sp@(L l _) = do
     cs <- getCommentsFor l
-    return $ mapLoc (HsSpliceE (EpAnn (spanAsAnchor l) NoEpAnns cs)) sp
+    return $ mapLoc (HsUntypedSplice (EpAnn (spanAsAnchor l) NoEpAnns cs)) sp
   mkHsRecordPV opts l lrec a (fbinds, ddLoc) anns = do
     cs <- getCommentsFor l
     r <- mkRecConstrOrUpdate opts a lrec (fbinds, ddLoc) (EpAnn (spanAsAnchor l) anns cs)

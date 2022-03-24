@@ -1401,7 +1401,7 @@ repTy (HsKindSig _ t k)     = do
                                 t1 <- repLTy t
                                 k1 <- repLTy k
                                 repTSig t1 k1
-repTy (HsSpliceTy _ splice)      = repSplice splice
+repTy (HsSpliceTy _ splice)      = repUntypedSplice splice
 repTy (HsExplicitListTy _ _ tys) = do
                                     tys1 <- repLTys tys
                                     repTPromotedList tys1
@@ -1448,13 +1448,11 @@ repRole (L _ Nothing)                 = rep2_nw inferRName []
 --              Splices
 -----------------------------------------------------------------------------
 
-repSplice :: HsSplice GhcRn -> MetaM (Core a)
+repUntypedSplice :: HsUntypedSplice GhcRn -> MetaM (Core a)
 -- See Note [How brackets and nested splices are handled] in GHC.Tc.Gen.Splice
 -- We return a CoreExpr of any old type; the context should know
-repSplice (HsTypedSplice   (_, n) _ _) = rep_splice n
-repSplice (HsUntypedSplice (_, n) _ _) = rep_splice n
-repSplice (HsQuasiQuote    (n, _) _ _) = rep_splice n
-repSplice e@(XSplice {})               = pprPanic "repSplice" (ppr e)
+repUntypedSplice (HsUntypedSpliceExpr (_, n) _ _) = rep_splice n
+repUntypedSplice (HsQuasiQuote        (n, _) _)   = rep_splice n
 
 rep_splice :: Name -> MetaM (Core a)
 rep_splice splice_name
@@ -1618,7 +1616,8 @@ repE (ArithSeq _ _ aseq) =
                              ds3 <- repLE e3
                              repFromThenTo ds1 ds2 ds3
 
-repE (HsSpliceE _ splice)  = repSplice splice
+repE (HsTypedSplice (_, _, n) _) = rep_splice n
+repE (HsUntypedSplice _ splice)  = repUntypedSplice splice
 repE (HsStatic _ e)        = repLE e >>= rep2 staticEName . (:[]) . unC
 repE (HsUnboundVar _ uv)   = do
                                occ   <- occNameLit uv
@@ -2085,7 +2084,7 @@ repP p@(NPat _ (L _ l) (Just _) _)
 repP (SigPat _ p t) = do { p' <- repLP p
                          ; t' <- repLTy (hsPatSigType t)
                          ; repPsig p' t' }
-repP (SplicePat _ splice) = repSplice splice
+repP (SplicePat _ splice) = repUntypedSplice splice
 repP other = notHandled (ThExoticPattern other)
 
 ----------------------------------------------------------

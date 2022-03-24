@@ -163,10 +163,11 @@ import Data.Proxy    ( Proxy (..) )
 ************************************************************************
 -}
 
-tcTypedBracket   :: HsExpr GhcRn -> LHsExpr GhcRn -> ExpRhoType -> TcM (HsExpr GhcTc)
-tcUntypedBracket :: HsExpr GhcRn -> HsQuote GhcRn -> [PendingRnSplice] -> ExpRhoType
-                 -> TcM (HsExpr GhcTc)
-tcSpliceExpr     :: HsSplice GhcRn  -> ExpRhoType -> TcM (HsExpr GhcTc)
+tcTypedBracket    :: HsExpr GhcRn -> LHsExpr GhcRn -> ExpRhoType -> TcM (HsExpr GhcTc)
+tcUntypedBracket  :: HsExpr GhcRn -> HsQuote GhcRn -> [PendingRnSplice] -> ExpRhoType
+                  -> TcM (HsExpr GhcTc)
+-- ROMES:TODO: Better way to pass around all these XTypedSplice...
+tcSpliceExpr :: (EpAnnCO, EpAnn [AddEpAnn], IdP GhcRn) -> LHsExpr GhcRn -> ExpRhoType -> TcM (HsExpr GhcTc)
         -- None of these functions add constraints to the LIE
 
 -- runQuasiQuoteExpr :: HsQuasiQuote RdrName -> RnM (LHsExpr RdrName)
@@ -599,21 +600,19 @@ That effort is tracked in #14838.
 ************************************************************************
 -}
 
-tcSpliceExpr splice@(HsTypedSplice (_, name) _ expr) res_ty
-  = addErrCtxt (spliceCtxtDoc splice) $
+tcSpliceExpr (_, _, splice_name) expr res_ty
+  = addErrCtxt (typedSpliceCtxtDoc splice_name expr) $
     setSrcSpan (getLocA expr)    $ do
     { stage <- getStage
     ; case stage of
           Splice {}            -> tcTopSplice expr res_ty
-          Brack pop_stage pend -> tcNestedSplice pop_stage pend name expr res_ty
+          Brack pop_stage pend -> tcNestedSplice pop_stage pend splice_name expr res_ty
           RunSplice _          ->
             -- See Note [RunSplice ThLevel] in "GHC.Tc.Types".
             pprPanic ("tcSpliceExpr: attempted to typecheck a splice when " ++
-                      "running another splice") (ppr splice)
+                      "running another splice") (pprTypedSplice splice_name expr)
           Comp                 -> tcTopSplice expr res_ty
     }
-tcSpliceExpr splice _
-  = pprPanic "tcSpliceExpr" (ppr splice)
 
 {- Note [Collecting modFinalizers in typed splices]
    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -647,10 +646,12 @@ tcNestedSplice pop_stage (TcPending ps_var lie_var q@(QuoteWrapper _ m_var)) spl
        -- But we still return a plausible expression
        --   (a) in case we print it in debug messages, and
        --   (b) because we test whether it is tagToEnum in Tc.Gen.Expr.tcApp
-       ; return (HsSpliceE noAnn $ -- ROMES:TODO what can we do for a plausible
+       ; return (HsUntypedSplice undefined $
+                                   -- ROMES:TODO worse than the plausible exp, can we have an HsUntypedSpliceResult?
+                                   -- ROMES:TODO what can we do for a plausible
                                    -- expression now? perhaps use a sum type to instance XUntypedSplice to
                                    -- construct one here without idP... or make up a Var?...
-                 HsUntypedSplice undefined BareSplice expr'') }
+                 HsUntypedSpliceExpr undefined BareSplice expr'') }
 
 
 tcNestedSplice _ _ splice_name _ _
@@ -669,7 +670,7 @@ tcTopSplice expr res_ty
        ; lcl_env <- getLclEnv
        ; let delayed_splice
               = DelayedSplice lcl_env expr res_ty q_expr
-       ; return (HsSpliceE noAnn (XSplice (HsSplicedT delayed_splice)))
+       ; return (HsTypedSplice (undefined, delayed_splice) q_expr) -- ROMES:TODO we used to use XSplice to construct this therefore we needn't IdP GhcTc
 
        }
 
@@ -716,10 +717,10 @@ runTopSplice (DelayedSplice lcl_env orig_expr res_ty q_expr)
 ************************************************************************
 -}
 
-spliceCtxtDoc :: HsSplice GhcRn -> SDoc
-spliceCtxtDoc splice
+typedSpliceCtxtDoc :: IdP GhcRn -> LHsExpr GhcRn -> SDoc
+typedSpliceCtxtDoc n splice
   = hang (text "In the Template Haskell splice")
-         2 (pprSplice splice)
+         2 (pprTypedSplice n splice)
 
 spliceResultDoc :: LHsExpr GhcTc -> SDoc
 spliceResultDoc expr

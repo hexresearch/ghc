@@ -596,7 +596,8 @@ data HsExpr p
   --         'GHC.Parser.Annotation.AnnClose'
 
   -- For details on above see Note [exact print annotations] in GHC.Parser.Annotation
-  | HsSpliceE  (XSpliceE p) (HsSplice p)
+  | HsTypedSplice (XTypedSplice p) (LHsExpr p) -- $$z  or $$(f 4)
+  | HsUntypedSplice  (XUntypedSplice p) (HsUntypedSplice p)
 
   -----------------------------------------------------------
   -- Arrow notation extension
@@ -1527,35 +1528,29 @@ Workshop 2007).
 
 Briefly, one writes
         [p| stuff |]
-and the arbitrary string "stuff" gets parsed by the parser 'p', whose
-type should be Language.Haskell.TH.Quote.QuasiQuoter.  'p' must be
-defined in another module, because we are going to run it here.  It's
-a bit like a TH splice:
-        $(p "stuff")
+and the arbitrary string "stuff" gets parsed by the parser 'p', whose type
+should be Language.Haskell.TH.Quote.QuasiQuoter.  'p' must be defined in
+another module, because we are going to run it here.  It's a bit like an
+/untyped/ TH splice where the parser is applied the "stuff" as a string, thus:
+     $(p "stuff")
 
-However, you can do this in patterns as well as terms.  Because of this,
-the splice is run by the *renamer* rather than the type checker.
+Notice that it's an /untyped/ TH splice: it can occur in patterns and types, as well
+as in expressions; and it runs in the renamer.
 -}
 
 -- | Haskell Splice
-data HsSplice id
-   = HsTypedSplice       --  $$z  or $$(f 4)
-        (XTypedSplice id)
-        SpliceDecoration -- Whether $$( ) variant found, for pretty printing
-        (LHsExpr id)     -- See Note [Pending Splices]
-
-   | HsUntypedSplice     --  $z  or $(f 4)
-        (XUntypedSplice id)
+data HsUntypedSplice id
+   = HsUntypedSpliceExpr --  $z  or $(f 4)
+        (XUntypedSpliceExpr id)
         SpliceDecoration -- Whether $( ) variant found, for pretty printing
-        (LHsExpr id)     -- See Note [Pending Splices]
+        (LHsExpr id)
 
-   | HsQuasiQuote        -- See Note [Quasi-quote overview]
+   | HsQuasiQuote            -- See Note [Quasi-quote overview]
         (XQuasiQuote id)
-        SrcSpan          -- The span of the enclosed string
-        FastString       -- The enclosed string
+        (XRec id FastString) -- The enclosed string
 
-   | XSplice !(XXSplice id) -- Extension point; see Note [Trees That Grow]
-                            -- in Language.Haskell.Syntax.Extension
+   | XUntypedSplice !(XXUntypedSplice id) -- Extension point; see Note [Trees That Grow]
+                                          -- in Language.Haskell.Syntax.Extension
 
 -- | A splice can appear with various decorations wrapped around it. This data
 -- type captures explicitly how it was originally written, for use in the pretty
@@ -1567,11 +1562,6 @@ data SpliceDecoration
 
 instance Outputable SpliceDecoration where
   ppr x = text $ show x
-
-
-isTypedSplice :: HsSplice id -> Bool
-isTypedSplice (HsTypedSplice {}) = True
-isTypedSplice _                  = False   -- Quasi-quotes are untyped splices
 
 
 -- | Haskell (Untyped) Quote = Expr + Pat + Type + Var
