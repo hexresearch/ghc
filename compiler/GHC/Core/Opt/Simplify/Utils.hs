@@ -1593,6 +1593,7 @@ rebuildLam env bndrs body mb_rhs
     do { dflags <- getDynFlags
        ; try_eta dflags bndrs body }
   where
+    mode = getMode env
     in_scope = getInScope env  -- Includes 'bndrs'
 
     try_eta :: DynFlags -> [OutBndr] -> OutExpr -> SimplM OutExpr
@@ -1608,7 +1609,7 @@ rebuildLam env bndrs body mb_rhs
            ; return etad_lam }
 
       | Nothing <- mb_rhs  -- See Note [Eta-expanding lambdas]
-      , sm_eta_expand (getMode env)
+      , sm_eta_expand mode
       , any isRuntimeVar bndrs  -- Only when there is at least one value lambda already
       , let body_arity = exprEtaExpandArity dflags body
       , expandableArityType body_arity  -- This guard is only so that we only do
@@ -1638,7 +1639,7 @@ rebuildLam env bndrs body mb_rhs
 
     mk_lams dflags bndrs (Cast body co)
       | -- Note [Casts and lambdas]
-        sm_eta_expand (getMode env)
+        sm_cast_swizzle mode
       , not (any bad bndrs)
       = do { lam <- mk_lams dflags bndrs body
            ; return (mkCast lam (mkPiCos Representational bndrs co)) }

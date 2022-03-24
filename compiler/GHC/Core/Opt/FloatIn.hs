@@ -29,7 +29,7 @@ import GHC.Core.FVs
 import GHC.Core.Type
 
 import GHC.Types.Basic      ( RecFlag(..), isRec, Levity(Unlifted) )
-import GHC.Types.Id         ( isOneShotBndr, idType, isJoinId, isJoinId_maybe )
+import GHC.Types.Id         ( idType, isJoinId, isJoinId_maybe )
 import GHC.Types.Tickish
 import GHC.Types.Var
 import GHC.Types.Var.Set

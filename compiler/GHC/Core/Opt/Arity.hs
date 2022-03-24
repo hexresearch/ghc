@@ -148,15 +148,7 @@ exprArity e = go e
     go (Lam x e) | isId x          = go e + 1
                  | otherwise       = go e
     go (Tick t e) | not (tickishIsCode t) = go e
-<<<<<<< HEAD
-    go (Cast e co)                 = trim_arity (go e) (coercionRKind co)
-                                        -- See Note [exprArity invariant]
-||||||| constructed merge base
-    go (Cast e co)                 = trim_arity (go e) (coercionRKind co)
-                                        -- Note [exprArity invariant]
-=======
     go (Cast e _)                  = go e
->>>>>>> Do arity trimming at bindings, rather than in exprArity
     go (App e (Type _))            = go e
     go (App f a) | exprIsTrivial a = (go f - 1) `max` 0
         -- See Note [exprArity for applications]
@@ -1992,8 +1984,9 @@ There are some particularly delicate points here:
   The above is correct, but eta-reducing g would yield g=f, the linter will
   complain that g and f don't have the same type.
 
-* Note [Arity care]: we need to be careful if we just look at f's
-  arity. Currently (Dec07), f's arity is visible in its own RHS (see
+* Note [Arity care]:
+  we need to be careful if we just look at f's arity
+  Currently (Dec07), f's arity is visible in its own RHS (see
   Note [Arity robustness] in GHC.Core.Opt.Simplify.Env) so we must *not* trust the
   arity when checking that 'f' is a value.  Otherwise we will
   eta-reduce
@@ -2157,12 +2150,10 @@ tryEtaReduce bndrs body
     ok_fun _fun                = False
 
     ---------------
-    ok_fun_id fun = -- There are arguments to reduce
+    ok_fun_id fun = -- There are arguments to reduce...
                     fun_arity fun >= incoming_arity &&
-                    -- We always want args for join points so
-                    -- we should never eta-reduce to a trivial expression.
-                    -- See Note [Invariants on join points] in GHC.Core, and #20599
-                    not (isJoinId fun)
+                    -- ... and the function can be eta reduced to arity 0
+                    canEtaReduceToArity fun 0 0
 
     ---------------
     fun_arity fun             -- See Note [Arity care]
@@ -2212,6 +2203,29 @@ tryEtaReduce bndrs body
        = Just (co', t:ticks)
 
     ok_arg _ _ _ _ = Nothing
+
+-- | Can we eta-reduce the given function to the specified arity?
+-- See Note [Eta reduction conditions].
+canEtaReduceToArity :: Id -> JoinArity -> Arity -> Bool
+canEtaReduceToArity fun dest_join_arity dest_arity =
+  not $
+        hasNoBinding fun
+       -- Don't undersaturate functions with no binding.
+
+    ||  ( isJoinId fun && dest_join_arity < idJoinArity fun )
+       -- Don't undersaturate join points.
+       -- See Note [Invariants on join points] in GHC.Core, and #20599
+
+    || ( dest_arity < idCbvMarkArity fun )
+       -- Don't undersaturate StrictWorkerIds.
+       -- See Note [Strict Worker Ids] in GHC.CoreToStg.Prep.
+
+    ||  isLinearType (idType fun)
+       -- Don't perform eta reduction on linear types.
+       -- If `f :: A %1-> B` and `g :: A -> B`,
+       -- then `g x = f x` is OK but `g = f` is not.
+       -- See Note [Eta reduction conditions].
+
 
 {- *********************************************************************
 *                                                                      *

@@ -38,7 +38,7 @@ import GHC.Core.Unfold
 import GHC.Core.Unfold.Make
 import GHC.Core.Utils
 import GHC.Core.Opt.Arity ( ArityType, arityTypeArityDiv, exprArity
-                          , pushCoTyArg, pushCoValArg, zapLamBndrs
+                          , pushCoTyArg, pushCoValArg
                           , typeArity, arityTypeArity, etaExpandAT )
 import GHC.Core.SimpleOpt ( exprIsConApp_maybe, joinPointBinding_maybe, joinPointBindings_maybe )
 import GHC.Core.FVs     ( mkRuleInfo )
@@ -620,7 +620,7 @@ tryCastWorkerWrapper env top_lvl old_bndr occ_info bndr (Cast rhs co)
                         --            a DFunUnfolding in mk_worker_unfolding
   , not (exprIsTrivial rhs)        -- Not x = y |> co; Wrinkle 1
   , not (hasInlineUnfolding info)  -- Not INLINE things: Wrinkle 4
-  , isConcrete (typeKind rhs_ty)   -- Don't peel off a cast if doing so would
+  , isConcrete (typeKind work_ty)  -- Don't peel off a cast if doing so would
                                    -- lose the underlying runtime representation.
                                    -- See Note [Preserve RuntimeRep info in cast w/w]
   = do  { (rhs_floats, work_rhs) <- prepareRhs env top_lvl occ_fs rhs

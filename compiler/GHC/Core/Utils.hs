@@ -90,7 +90,8 @@ import GHC.Types.Literal
 import GHC.Types.Tickish
 import GHC.Types.Id
 import GHC.Types.Id.Info
-import GHC.Types.Basic( Arity )
+import GHC.Types.Basic( Arity, Levity(..)
+                      , CbvMark(..), isMarkedCbv )
 import GHC.Types.Unique
 import GHC.Types.Unique.Set
 
