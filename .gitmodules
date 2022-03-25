@@ -4,8 +4,9 @@
 	ignore = untracked
 [submodule "libraries/bytestring"]
 	path = libraries/bytestring
-	url = https://gitlab.haskell.org/ghc/packages/bytestring.git
+	url = https://github.com/hexresearch/bytestring.git
 	ignore = untracked
+	branch = 0.10.8.2-strict-align
 [submodule "libraries/Cabal"]
 	path = libraries/Cabal
 	url = https://gitlab.haskell.org/ghc/packages/Cabal.git
